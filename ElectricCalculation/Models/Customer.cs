@@ -1,18 +1,71 @@
+using System;
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace ElectricCalculation.Models
 {
-    public class Customer
+    public partial class Customer : ObservableObject
     {
-        public string Name { get; set; } = string.Empty;
+        [ObservableProperty]
+        private string name = string.Empty;
 
-        public string GroupName { get; set; } = string.Empty;
+        [ObservableProperty]
+        private string groupName = string.Empty;
 
-        public string Category { get; set; } = string.Empty;
+        [ObservableProperty]
+        private string category = string.Empty;
 
-        public string Address { get; set; } = string.Empty;
+        [ObservableProperty]
+        private string address = string.Empty;
 
-        public string Phone { get; set; } = string.Empty;
+        [ObservableProperty]
+        private string phone = string.Empty;
 
-        public string MeterNumber { get; set; } = string.Empty;
+        [ObservableProperty]
+        private string meterNumber = string.Empty;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(Consumption))]
+        [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
+        [NotifyPropertyChangedFor(nameof(Amount))]
+        private decimal previousIndex;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(Consumption))]
+        [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
+        [NotifyPropertyChangedFor(nameof(Amount))]
+        private decimal currentIndex;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(Consumption))]
+        [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
+        [NotifyPropertyChangedFor(nameof(Amount))]
+        private decimal multiplier = 1;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
+        [NotifyPropertyChangedFor(nameof(Amount))]
+        private decimal subsidizedKwh;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(Amount))]
+        private decimal unitPrice;
+
+        public decimal Consumption
+        {
+            get
+            {
+                var delta = CurrentIndex - PreviousIndex;
+                if (delta <= 0 || Multiplier <= 0)
+                {
+                    return 0;
+                }
+
+                return delta * Multiplier;
+            }
+        }
+
+        public decimal ChargeableKwh => Math.Max(0, Consumption - SubsidizedKwh);
+
+        public decimal Amount => ChargeableKwh * UnitPrice;
     }
 }
-

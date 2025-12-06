@@ -1,0 +1,162 @@
+<Window x:Class="ElectricCalculation.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:ElectricCalculation.ViewModels"
+        mc:Ignorable="d"
+        Title="Electric Calculation"
+        Height="600"
+        Width="1100">
+    <Window.DataContext>
+        <vm:MainWindowViewModel />
+    </Window.DataContext>
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Top toolbar -->
+        <StackPanel Orientation="Horizontal"
+                    Grid.Row="0"
+                    Margin="0,0,0,8">
+            <TextBlock Text="Kỳ tính:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,0" />
+            <TextBox Width="150"
+                     VerticalAlignment="Center"
+                     Text="{Binding PeriodLabel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Button Content="Thêm dòng"
+                    Margin="16,0,0,0"
+                    Padding="12,4"
+                    Command="{Binding AddRowCommand}" />
+
+            <Button Content="Import từ Excel"
+                    Margin="16,0,0,0"
+                    Padding="12,4"
+                    Click="ImportFromExcel_Click" />
+
+            <Button Content="Export ra Excel"
+                    Margin="16,0,0,0"
+                    Padding="12,4"
+                    Click="ExportToExcel_Click" />
+
+            <Button Content="In"
+                    Margin="16,0,0,0"
+                    Padding="12,4"
+                    Click="PrintInvoice_Click" />
+
+            <TextBlock Text="Người lập đơn:"
+                       VerticalAlignment="Center"
+                       Margin="24,0,4,0" />
+            <TextBox Width="150"
+                     VerticalAlignment="Center"
+                     Text="{Binding InvoiceIssuer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <TextBlock Text="Tìm:"
+                       VerticalAlignment="Center"
+                       Margin="24,0,4,0" />
+            <ComboBox Width="130"
+                      ItemsSource="{Binding SearchFields}"
+                      SelectedItem="{Binding SelectedSearchField, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+            <TextBox Width="200"
+                     Margin="4,0,0,0"
+                     VerticalAlignment="Center"
+                     Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        </StackPanel>
+
+        <!-- Main grid -->
+        <DataGrid x:Name="CustomerGrid"
+                  Grid.Row="1"
+                  ItemsSource="{Binding CustomersView}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  IsReadOnly="False"
+                  SelectedItem="{Binding SelectedCustomer, Mode=TwoWay}"
+                  PreviewMouseWheel="DataGrid_PreviewMouseWheel">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Tên khách"
+                                    Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="2*" />
+                <DataGridTextColumn Header="Nhóm/Đơn vị"
+                                    Binding="{Binding GroupName, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="2*" />
+                <DataGridTextColumn Header="Loại"
+                                    Binding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Địa chỉ"
+                                    Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="2*" />
+                <DataGridTextColumn Header="Số ĐT"
+                                    Binding="{Binding Phone, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Số công tơ"
+                                    Binding="{Binding MeterNumber, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+
+                <DataGridTextColumn Header="Chỉ số cũ"
+                                    Binding="{Binding PreviousIndex, UpdateSourceTrigger=PropertyChanged, StringFormat=N0}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Chỉ số mới"
+                                    Binding="{Binding CurrentIndex, UpdateSourceTrigger=PropertyChanged, StringFormat=N0}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Hệ số"
+                                    Binding="{Binding Multiplier, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Bao cấp (kWh)"
+                                    Binding="{Binding SubsidizedKwh, UpdateSourceTrigger=PropertyChanged, StringFormat=N0}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Đơn giá (VNĐ/kWh)"
+                                    Binding="{Binding UnitPrice, UpdateSourceTrigger=PropertyChanged, StringFormat=N0}"
+                                    Width="*" />
+
+                <DataGridTextColumn Header="Điện năng (kWh)"
+                                    IsReadOnly="True"
+                                    Binding="{Binding Consumption, StringFormat=N0}"
+                                    Width="*" />
+                <DataGridTextColumn Header="KWh tính tiền"
+                                    IsReadOnly="True"
+                                    Binding="{Binding ChargeableKwh, StringFormat=N0}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Thành tiền (VNĐ)"
+                                    IsReadOnly="True"
+                                    Binding="{Binding Amount, StringFormat=N0}"
+                                    Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Bottom summary + clear button -->
+        <Grid Grid.Row="2"
+              Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <TextBlock Margin="0,0,16,0"
+                           Text="{Binding CustomerCount, StringFormat='Số khách: {0}'}" />
+                <TextBlock Margin="0,0,16,0"
+                           Text="{Binding TotalConsumption, StringFormat='Tổng kWh: {0:N0}'}" />
+                <TextBlock Margin="0,0,16,0"
+                           Text="{Binding TotalChargeableKwh, StringFormat='KWh tính tiền: {0:N0}'}" />
+                <TextBlock Text="{Binding TotalAmount, StringFormat='Tổng tiền: {0:N0} VNĐ'}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button Content="Xóa hết"
+                        Padding="12,4"
+                        Command="{Binding ClearAllCommand}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
+

@@ -316,6 +316,11 @@ paket-files/
 __pycache__/
 *.pyc
 
+# Excel template exploration artifacts (do not commit)
+/_DefaultTemplate/
+/_SummaryTemplate/
+/*_Template.zip
+
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config
