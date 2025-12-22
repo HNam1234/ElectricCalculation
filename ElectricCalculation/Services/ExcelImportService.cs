@@ -8,10 +8,11 @@ using ElectricCalculation.Models;
 
 namespace ElectricCalculation.Services
 {
-    // Importer đơn giản, đọc đúng theo format file gốc:
-    // Sheet "Data", từ dòng 5 trở đi, các cột cố định:
-    // A: STT, B: Tên khách, C: Đơn vị chủ quản, D: Địa chỉ, E: Điện thoại,
-    // J: Số công tơ, O: Chỉ số mới, P: Chỉ số cũ, Q: Hệ số, S: Bao cấp, U: Đơn giá.
+    // Simple importer for the summary template:
+    // Sheet "Data", data starts at row 5, key columns:
+    // A: No., B: Customer, C: Group, D: Address, E: Household phone, F: Representative,
+    // G: Rep phone, H: Building, J: Meter, K: Category, L: Location, M: Substation, N: Page,
+    // O: Current, P: Previous, Q: Multiplier, S: Subsidy, U: Unit price, W: Performed by.
     public static class ExcelImportService
     {
         public static IList<Customer> ImportFromFile(string filePath, out string? warningMessage)
@@ -112,7 +113,7 @@ namespace ElectricCalculation.Services
                     continue;
                 }
 
-                // Bỏ qua header: dữ liệu bắt đầu từ hàng 5
+                // Skip header; data starts at row 5.
                 if (rowIndex < 5)
                 {
                     continue;
@@ -166,28 +167,41 @@ namespace ElectricCalculation.Services
                     cells[columnLetters] = cellValue;
                 }
 
-                // Bỏ qua dòng nếu không có STT
-                var stt = GetString(cells, "A");
-                if (string.IsNullOrWhiteSpace(stt))
+                // Skip rows without sequence number.
+                var sequenceNumber = GetInt(cells, "A");
+                if (sequenceNumber <= 0)
                 {
                     continue;
                 }
 
+                var householdPhone = GetString(cells, "E") ?? string.Empty;
+                var representativePhone = GetString(cells, "G") ?? string.Empty;
+
                 var customer = new Customer
                 {
+                    SequenceNumber = sequenceNumber,
                     Name = GetString(cells, "B") ?? string.Empty,
                     GroupName = GetString(cells, "C") ?? string.Empty,
                     Address = GetString(cells, "D") ?? string.Empty,
-                    Phone = GetString(cells, "E") ?? string.Empty,
+                    RepresentativeName = GetString(cells, "F") ?? string.Empty,
+                    HouseholdPhone = householdPhone,
+                    Phone = !string.IsNullOrWhiteSpace(representativePhone) ? representativePhone : householdPhone,
+                    BuildingName = GetString(cells, "H") ?? string.Empty,
                     MeterNumber = GetString(cells, "J") ?? string.Empty,
+                    Category = GetString(cells, "K") ?? string.Empty,
                     Location = GetString(cells, "L") ?? string.Empty
                 };
+
+                customer.Substation = GetString(cells, "M") ?? string.Empty;
+                customer.Page = GetString(cells, "N") ?? string.Empty;
 
                 customer.CurrentIndex = GetDecimal(cells, "O");
                 customer.PreviousIndex = GetDecimal(cells, "P");
                 customer.Multiplier = GetDecimal(cells, "Q");
                 customer.SubsidizedKwh = GetDecimal(cells, "S");
                 customer.UnitPrice = GetDecimal(cells, "U");
+
+                customer.PerformedBy = GetString(cells, "W") ?? string.Empty;
 
                 if (customer.Multiplier <= 0)
                 {
@@ -203,6 +217,27 @@ namespace ElectricCalculation.Services
         private static string? GetString(IDictionary<string, string?> cells, string column)
         {
             return cells.TryGetValue(column, out var value) ? value : null;
+        }
+
+        private static int GetInt(IDictionary<string, string?> cells, string column)
+        {
+            var text = GetString(cells, column);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return 0;
+            }
+
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                return value;
+            }
+
+            if (decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var decimalValue))
+            {
+                return (int)decimalValue;
+            }
+
+            return 0;
         }
 
         private static decimal GetDecimal(IDictionary<string, string?> cells, string column)

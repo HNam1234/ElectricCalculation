@@ -19,7 +19,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Tiêu đề + chọn kiểu thống kê -->
+        <!-- Header + metric selector -->
         <Grid Grid.Row="0"
               Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
@@ -44,14 +44,14 @@
             </StackPanel>
         </Grid>
 
-        <!-- Nội dung chính -->
+        <!-- Main content -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Bên trái: biểu đồ -->
+            <!-- Left: charts -->
             <Grid Grid.Column="0"
                   Margin="0,0,12,0">
                 <Grid.RowDefinitions>
@@ -65,9 +65,9 @@
                            Margin="0,0,0,4" />
 
                 <Grid Grid.Row="1">
-                    <!-- Hai chart chồng lên nhau, bật tắt bằng Visibility -->
+                    <!-- Two overlapped charts; toggled via Visibility -->
                     <Grid>
-                        <!-- Biểu đồ theo kWh -->
+                        <!-- kWh chart -->
                         <Border BorderBrush="LightGray"
                                 BorderThickness="1"
                                 Visibility="{Binding ShowKwh, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -75,19 +75,19 @@
                                           VerticalScrollBarVisibility="Disabled">
                                 <Grid Margin="4">
                                     <Grid.ColumnDefinitions>
-                                        <!-- Nhãn trục tung -->
+                                        <!-- Y-axis labels -->
                                         <ColumnDefinition Width="60" />
-                                        <!-- Vùng vẽ cột -->
+                                        <!-- Plot area -->
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
-                                        <!-- Cột + trục -->
+                                        <!-- Bars + axes -->
                                         <RowDefinition Height="*" />
-                                        <!-- Nhãn trục hoành -->
+                                        <!-- X-axis labels -->
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <!-- Trục tung kWh -->
+                                    <!-- kWh Y-axis -->
                                     <Grid Grid.Row="0"
                                           Grid.Column="0"
                                           Margin="0,0,4,16">
@@ -131,7 +131,7 @@
                                                    Margin="0,0,2,-2" />
                                     </Grid>
 
-                                    <!-- Vùng cột kWh -->
+                                    <!-- kWh bar area -->
                                     <Grid Grid.Row="0"
                                           Grid.Column="1"
                                           Margin="0,0,0,16">
@@ -143,7 +143,7 @@
                                             <RowDefinition Height="*" />
                                         </Grid.RowDefinitions>
 
-                                        <!-- Các đường kẻ ngang -->
+                                        <!-- Grid lines -->
                                         <Border Grid.Row="0"
                                                 BorderBrush="#FFE0E0E0"
                                                 BorderThickness="0,1,0,0" />
@@ -160,13 +160,13 @@
                                                 BorderBrush="#FFB0B0B0"
                                                 BorderThickness="0,1,0,1" />
 
-                                        <!-- Trục tung -->
+                                        <!-- Y-axis -->
                                         <Border Grid.RowSpan="5"
                                                 HorizontalAlignment="Left"
                                                 BorderBrush="#FF808080"
                                                 BorderThickness="1,0,0,0" />
 
-                                        <!-- Các cột -->
+                                        <!-- Bars -->
                                         <ItemsControl Grid.RowSpan="5"
                                                       Margin="6,0,0,0"
                                                       ItemsSource="{Binding Items}">
@@ -197,7 +197,7 @@
                                         </ItemsControl>
                                     </Grid>
 
-                                    <!-- Nhãn trục hoành: tên nhóm / đơn vị -->
+                                    <!-- X-axis labels: group/unit -->
                                     <ItemsControl Grid.Row="1"
                                                   Grid.Column="1"
                                                   Margin="6,0,0,0"
@@ -221,7 +221,7 @@
                             </ScrollViewer>
                         </Border>
 
-                        <!-- Biểu đồ theo tiền -->
+                        <!-- Amount chart -->
                         <Border BorderBrush="LightGray"
                                 BorderThickness="1"
                                 Visibility="{Binding ShowAmount, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -237,7 +237,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <!-- Trục tung tiền -->
+                                    <!-- Amount Y-axis -->
                                     <Grid Grid.Row="0"
                                           Grid.Column="0"
                                           Margin="0,0,4,16">
@@ -281,7 +281,7 @@
                                                    Margin="0,0,2,-2" />
                                     </Grid>
 
-                                    <!-- Vùng cột tiền -->
+                                    <!-- Amount bar area -->
                                     <Grid Grid.Row="0"
                                           Grid.Column="1"
                                           Margin="0,0,0,16">
@@ -344,7 +344,7 @@
                                         </ItemsControl>
                                     </Grid>
 
-                                    <!-- Nhãn trục hoành -->
+                                    <!-- X-axis labels -->
                                     <ItemsControl Grid.Row="1"
                                                   Grid.Column="1"
                                                   Margin="6,0,0,0"
@@ -371,7 +371,7 @@
                 </Grid>
             </Grid>
 
-            <!-- Bên phải: bảng thống kê -->
+            <!-- Right: summary table -->
             <DataGrid x:Name="StatsGrid"
                       Grid.Column="1"
                       ItemsSource="{Binding Items}"
@@ -400,7 +400,7 @@
             </DataGrid>
         </Grid>
 
-        <!-- Tổng cộng + nút in/đóng -->
+        <!-- Totals + print/close -->
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
@@ -418,7 +418,7 @@
             <Button Content="In Excel nhóm"
                     Width="120"
                     Margin="0,0,8,0"
-                    Click="PrintGroupButton_Click" />
+                    Command="{Binding PrintGroupCommand}" />
 
             <Button Content="Đóng"
                     Width="90"
@@ -426,4 +426,3 @@
         </StackPanel>
     </Grid>
 </Window>
-

@@ -20,7 +20,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Thanh công cụ trên -->
+        <!-- Top toolbar -->
         <StackPanel Orientation="Horizontal"
                     Grid.Row="0"
                     Margin="0,0,0,8">
@@ -39,27 +39,28 @@
             <Button Content="Import từ Excel"
                     Margin="16,0,0,0"
                     Padding="12,4"
-                    Click="ImportFromExcel_Click" />
+                    Command="{Binding ImportFromExcelWithDialogCommand}" />
 
             <Button Content="Export ra Excel"
                     Margin="16,0,0,0"
                     Padding="12,4"
-                    Click="ExportToExcel_Click" />
+                    Command="{Binding ExportToExcelWithDialogCommand}" />
 
             <Button Content="In"
                     Margin="16,0,0,0"
                     Padding="12,4"
-                    Click="PrintInvoice_Click" />
+                    Command="{Binding PrintInvoiceWithDialogCommand}" />
 
             <Button Content="In nhiều phiếu"
                     Margin="8,0,0,0"
                     Padding="12,4"
-                    Click="PrintMultipleInvoices_Click" />
+                    Command="{Binding PrintMultipleInvoicesWithDialogCommand}"
+                    CommandParameter="{Binding SelectedItems, ElementName=CustomerGrid}" />
 
             <Button Content="Thống kê"
                     Margin="16,0,0,0"
                     Padding="12,4"
-                    Click="ShowReport_Click" />
+                    Command="{Binding ShowReportCommand}" />
 
             <TextBlock Text="Người lập đơn:"
                        VerticalAlignment="Center"
@@ -81,7 +82,7 @@
                      Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         </StackPanel>
 
-        <!-- Lưới chính -->
+        <!-- Main grid -->
         <DataGrid x:Name="CustomerGrid"
                   Grid.Row="1"
                   ItemsSource="{Binding CustomersView}"
@@ -98,17 +99,38 @@
                 <DataGridTextColumn Header="Nhóm / Đơn vị"
                                     Binding="{Binding GroupName, UpdateSourceTrigger=PropertyChanged}"
                                     Width="2*" />
+                <DataGridTextColumn Header="Đại diện"
+                                    Binding="{Binding RepresentativeName, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="2*" />
                 <DataGridTextColumn Header="Loại"
                                     Binding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"
                                     Width="*" />
                 <DataGridTextColumn Header="Địa chỉ"
                                     Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}"
                                     Width="2*" />
+                <DataGridTextColumn Header="ĐT (hộ)"
+                                    Binding="{Binding HouseholdPhone, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
                 <DataGridTextColumn Header="Số ĐT"
                                     Binding="{Binding Phone, UpdateSourceTrigger=PropertyChanged}"
                                     Width="*" />
+                <DataGridTextColumn Header="Nhà / tòa"
+                                    Binding="{Binding BuildingName, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
                 <DataGridTextColumn Header="Số công tơ"
                                     Binding="{Binding MeterNumber, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Vị trí"
+                                    Binding="{Binding Location, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Trạm"
+                                    Binding="{Binding Substation, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Trang"
+                                    Binding="{Binding Page, UpdateSourceTrigger=PropertyChanged}"
+                                    Width="*" />
+                <DataGridTextColumn Header="Người TH"
+                                    Binding="{Binding PerformedBy, UpdateSourceTrigger=PropertyChanged}"
                                     Width="*" />
 
                 <DataGridTextColumn Header="Chỉ số cũ"
@@ -142,7 +164,7 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Thanh tổng kết + nút xóa -->
+        <!-- Totals + clear button -->
         <Grid Grid.Row="2"
               Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
@@ -171,4 +193,3 @@
         </Grid>
     </Grid>
 </Window>
-

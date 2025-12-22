@@ -6,6 +6,9 @@ namespace ElectricCalculation.Models
     public partial class Customer : ObservableObject
     {
         [ObservableProperty]
+        private int sequenceNumber;
+
+        [ObservableProperty]
         private string name = string.Empty;
 
         [ObservableProperty]
@@ -18,12 +21,30 @@ namespace ElectricCalculation.Models
         private string address = string.Empty;
 
         [ObservableProperty]
+        private string representativeName = string.Empty;
+
+        [ObservableProperty]
+        private string householdPhone = string.Empty;
+
+        [ObservableProperty]
         private string phone = string.Empty;
+
+        [ObservableProperty]
+        private string buildingName = string.Empty;
 
         [ObservableProperty]
         private string meterNumber = string.Empty;
 
-        // Vị trí đặt công tơ (nếu có)
+        [ObservableProperty]
+        private string substation = string.Empty;
+
+        [ObservableProperty]
+        private string page = string.Empty;
+
+        [ObservableProperty]
+        private string performedBy = string.Empty;
+
+        // Meter location (optional).
         [ObservableProperty]
         private string location = string.Empty;
 

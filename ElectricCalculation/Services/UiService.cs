@@ -1,0 +1,164 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Windows;
+using ElectricCalculation.Models;
+using ElectricCalculation.ViewModels;
+using ElectricCalculation.Views;
+using Microsoft.Win32;
+
+namespace ElectricCalculation.Services
+{
+    public sealed class UiService
+    {
+        private const string InvoiceTemplateFileName = "DefaultTemplate.xlsx";
+        private const string LegacySummaryTemplateFileName = "Bảng tổng hợp thu tháng 6 năm 2025.xlsx";
+
+        private static Window? GetOwner()
+        {
+            return Application.Current?.MainWindow;
+        }
+
+        public string? ShowOpenExcelFileDialog()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*"
+            };
+
+            var owner = GetOwner();
+            var result = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+            return result == true ? dialog.FileName : null;
+        }
+
+        public string? ShowSaveExcelFileDialog(string defaultFileName, string? title = null)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
+                FileName = defaultFileName
+            };
+
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                dialog.Title = title;
+            }
+
+            var owner = GetOwner();
+            var result = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+            return result == true ? dialog.FileName : null;
+        }
+
+        public string? ShowFolderPickerDialog(string title)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = title,
+                Filter = "Thư mục|*.folder",
+                FileName = "Chon_thu_muc_o_day"
+            };
+
+            var owner = GetOwner();
+            var result = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+            if (result != true)
+            {
+                return null;
+            }
+
+            return Path.GetDirectoryName(dialog.FileName);
+        }
+
+        public bool Confirm(string title, string message)
+        {
+            var owner = GetOwner();
+            var result = owner != null
+                ? MessageBox.Show(owner, message, title, MessageBoxButton.YesNo, MessageBoxImage.Question)
+                : MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            return result == MessageBoxResult.Yes;
+        }
+
+        public void ShowMessage(string title, string message)
+        {
+            var vm = new MessageDialogViewModel(title, message);
+            var dialog = new MessageDialogWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            dialog.ShowDialog();
+        }
+
+        public void OpenWithDefaultApp(string path)
+        {
+            var info = new ProcessStartInfo(path)
+            {
+                UseShellExecute = true
+            };
+
+            Process.Start(info);
+        }
+
+        public string GetSummaryTemplatePath()
+        {
+            var rootDir = GetSolutionRootDirectory();
+
+            var legacyPath = Path.Combine(rootDir, LegacySummaryTemplateFileName);
+            if (File.Exists(legacyPath))
+            {
+                return legacyPath;
+            }
+
+            var candidates = Directory
+                .EnumerateFiles(rootDir, "Bảng tổng hợp thu*.xlsx", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ToList();
+
+            var picked = candidates.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(picked))
+            {
+                return picked;
+            }
+
+            throw new WarningException("Không tìm thấy file Excel template tổng hợp (Bảng tổng hợp thu*.xlsx) cạnh solution.");
+        }
+
+        public string GetInvoiceTemplatePath()
+        {
+            var rootDir = GetSolutionRootDirectory();
+            var path = Path.Combine(rootDir, InvoiceTemplateFileName);
+
+            if (!File.Exists(path))
+            {
+                throw new WarningException($"Không tìm thấy file Excel template in mặc định '{InvoiceTemplateFileName}' cạnh solution.");
+            }
+
+            return path;
+        }
+
+        public void ShowReportWindow(string periodLabel, IEnumerable<Customer> customers)
+        {
+            var list = customers?.ToList() ?? new List<Customer>();
+
+            var vm = new ReportViewModel(periodLabel, list, this);
+            var window = new ReportWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            window.ShowDialog();
+        }
+
+        private static string GetSolutionRootDirectory()
+        {
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            return Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", ".."));
+        }
+    }
+}
+

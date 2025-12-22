@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ElectricCalculation.Models;
 
@@ -54,7 +55,7 @@ namespace ElectricCalculation.Services
             var sheetsElement = workbookDoc.Root?.Element(mainNs + "sheets")
                 ?? throw new InvalidOperationException("Invoice template is invalid: sheets collection not found.");
 
-            // Template chỉ có 1 sheet nên lấy sheet đầu tiên.
+            // Template has a single sheet; use the first worksheet.
             var invoiceSheetElement = sheetsElement
                 .Elements(mainNs + "sheet")
                 .FirstOrDefault()
@@ -105,7 +106,7 @@ namespace ElectricCalculation.Services
             var sheetDataElement = sheetDoc.Root?.Element(mainNs + "sheetData")
                 ?? throw new InvalidOperationException("Invoice template worksheet has no sheetData section.");
 
-            // Xoá calcChain để Excel không cảnh báo "We found a problem with some content..."
+            // Remove calcChain to avoid Excel "We found a problem with some content..." warning.
             const string calcChainType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
 
             var calcChainRelationship = relationshipsRoot
@@ -134,68 +135,117 @@ namespace ElectricCalculation.Services
             var period = periodLabel?.Trim() ?? string.Empty;
             var issuer = issuerName?.Trim() ?? string.Empty;
 
-            var name = customer.Name?.Trim() ?? string.Empty;
+            var householdName = customer.Name?.Trim() ?? string.Empty;
+            var receiptNumber = customer.SequenceNumber > 0 ? customer.SequenceNumber : 1;
+
+            var representativeName = customer.RepresentativeName?.Trim() ?? string.Empty;
             var groupName = customer.GroupName?.Trim() ?? string.Empty;
+            var name = !string.IsNullOrWhiteSpace(representativeName) ? representativeName : householdName;
             var address = customer.Address?.Trim() ?? string.Empty;
             var location = customer.Location?.Trim() ?? string.Empty;
-            var phone = customer.Phone?.Trim() ?? string.Empty;
+            var householdPhone = customer.HouseholdPhone?.Trim() ?? string.Empty;
+            var representativePhone = customer.Phone?.Trim() ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(householdPhone) &&
+                string.Equals(representativePhone, householdPhone, StringComparison.OrdinalIgnoreCase))
+            {
+                representativePhone = string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(householdPhone) && !string.IsNullOrWhiteSpace(representativePhone))
+            {
+                householdPhone = representativePhone;
+                representativePhone = string.Empty;
+            }
+
             var meterNumber = customer.MeterNumber?.Trim() ?? string.Empty;
+            var substation = customer.Substation?.Trim() ?? string.Empty;
+            var bookCode = customer.BuildingName?.Trim() ?? string.Empty;
+            var page = customer.Page?.Trim() ?? string.Empty;
 
-            // Header: kỳ, số phiếu, kênh gửi, địa chỉ, điện thoại, đại diện...
-            UpdateTextCell(sheetDataElement, mainNs, "I4", "Số phiếu: 1");
+            UpdateTextCell(sheetDataElement, mainNs, "I4", $"Số phiếu: {receiptNumber}");
+            UpdateNumberCell(sheetDataElement, mainNs, "I6", receiptNumber);
 
-            if (!string.IsNullOrWhiteSpace(period))
+            var periodText = FormatPeriodLabel(period);
+            if (!string.IsNullOrWhiteSpace(periodText))
             {
-                UpdateTextCell(sheetDataElement, mainNs, "A2", $"Kỳ: {period}");
+                UpdateTextCell(sheetDataElement, mainNs, "F2", periodText);
             }
 
-            var channelTextSource = !string.IsNullOrWhiteSpace(groupName) ? groupName : name;
-            if (!string.IsNullOrWhiteSpace(channelTextSource))
-            {
-                UpdateTextCell(sheetDataElement, mainNs, "A5", $"Kênh gửi: {channelTextSource}");
-            }
+            var recipient = !string.IsNullOrWhiteSpace(householdName) ? householdName : groupName;
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "A5",
+                string.IsNullOrWhiteSpace(recipient) ? string.Empty : $"Kính gửi: {recipient}");
 
-            if (!string.IsNullOrWhiteSpace(address))
-            {
-                UpdateTextCell(sheetDataElement, mainNs, "A7", $"Địa chỉ hộ tiêu thụ: {address}.");
-            }
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "A7",
+                string.IsNullOrWhiteSpace(address) ? string.Empty : $"Địa chỉ hộ tiêu thụ: {address}.");
 
-            if (!string.IsNullOrWhiteSpace(phone))
-            {
-                UpdateTextCell(sheetDataElement, mainNs, "I7", $"Điện thoại: {phone}.");
-            }
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "I7",
+                string.IsNullOrWhiteSpace(householdPhone) ? string.Empty : $"Điện thoại: {householdPhone}.");
 
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                UpdateTextCell(sheetDataElement, mainNs, "A8", $"Đại diện: {name}.");
-            }
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "A8",
+                string.IsNullOrWhiteSpace(name) ? string.Empty : $"Đại diện: {name}.");
 
-            // Dòng I8 trong template là điện thoại người đại diện -> để trống cho đơn giản.
-            UpdateTextCell(sheetDataElement, mainNs, "I8", string.Empty);
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "I8",
+                string.IsNullOrWhiteSpace(representativePhone) ? string.Empty : $"Điện thoại: {representativePhone}.");
 
-            if (!string.IsNullOrWhiteSpace(meterNumber))
-            {
-                UpdateTextCell(sheetDataElement, mainNs, "I10", $"Số công tơ: {meterNumber}.");
-            }
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "I10",
+                string.IsNullOrWhiteSpace(meterNumber) ? string.Empty : $"Số công tơ: {meterNumber}.");
+
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "I15",
+                string.IsNullOrWhiteSpace(substation) ? string.Empty : $"TBA: {substation}.");
+
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "I16",
+                string.IsNullOrWhiteSpace(bookCode) ? string.Empty : $"Mã sổ: {bookCode}.");
+
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "I17",
+                string.IsNullOrWhiteSpace(page) ? string.Empty : $"Trang: {page}.");
 
             var multiplier = customer.Multiplier <= 0 ? 1 : customer.Multiplier;
             var consumption = customer.Consumption;
             var amount = customer.Amount;
 
-            // B13/C13/D13/F13/G13: chỉ số, hệ số, bao cấp, đơn giá
+            // B13/C13/D13/F13/G13: indexes, multiplier, subsidy, unit price.
             UpdateNumberCell(sheetDataElement, mainNs, "B13", customer.CurrentIndex);
             UpdateNumberCell(sheetDataElement, mainNs, "C13", customer.PreviousIndex);
             UpdateNumberCell(sheetDataElement, mainNs, "D13", multiplier);
             UpdateNumberCell(sheetDataElement, mainNs, "F13", customer.SubsidizedKwh);
             UpdateNumberCell(sheetDataElement, mainNs, "G13", customer.UnitPrice);
 
-            // E13: sản lượng (kWh)
+            // E13: consumption (kWh).
             UpdateNumberCell(sheetDataElement, mainNs, "E13", consumption);
 
-            // H13: thành tiền
+            // H13: amount.
             UpdateNumberCell(sheetDataElement, mainNs, "H13", amount);
+            UpdateNumberCell(sheetDataElement, mainNs, "H18", amount);
 
-            // I13: Vị trí đặt công tơ (nếu có)
+            // I13: meter location (optional).
             if (!string.IsNullOrWhiteSpace(location))
             {
                 UpdateTextCell(sheetDataElement, mainNs, "I13", $"Vị trí đặt: {location}.");
@@ -205,17 +255,22 @@ namespace ElectricCalculation.Services
                 UpdateTextCell(sheetDataElement, mainNs, "I13", string.Empty);
             }
 
-            // A19: số tiền bằng chữ
+            // A19: amount in words.
             var amountText = ConvertAmountToVietnameseText(amount);
             if (!string.IsNullOrWhiteSpace(amountText))
             {
                 UpdateTextCell(sheetDataElement, mainNs, "A19", $"Bằng chữ: {amountText}./.");
             }
 
-            // H21: Người lập đơn
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "H21",
+                $"Hà Nội, ngày {DateTime.Now.Day} tháng {DateTime.Now.Month} năm {DateTime.Now.Year}");
+
             if (!string.IsNullOrWhiteSpace(issuer))
             {
-                UpdateTextCell(sheetDataElement, mainNs, "H21", issuer);
+                UpdateTextCell(sheetDataElement, mainNs, "H27", issuer);
             }
 
             using (var sheetWriteStream = sheetEntry.Open())
@@ -350,6 +405,36 @@ namespace ElectricCalculation.Services
             return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rowIndex)
                 ? rowIndex
                 : 0;
+        }
+
+        private static string? FormatPeriodLabel(string periodLabel)
+        {
+            if (string.IsNullOrWhiteSpace(periodLabel))
+            {
+                return null;
+            }
+
+            var match = Regex.Match(periodLabel, @"(\d{1,2})\s*/\s*(\d{4})");
+            if (match.Success &&
+                int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var month) &&
+                int.TryParse(match.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var year))
+            {
+                return month is >= 1 and <= 12 && year >= 2000
+                    ? $"Tháng {month} năm {year}"
+                    : periodLabel;
+            }
+
+            match = Regex.Match(periodLabel, @"tháng\s*(\d{1,2}).*?(\d{4})", RegexOptions.IgnoreCase);
+            if (match.Success &&
+                int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out month) &&
+                int.TryParse(match.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out year))
+            {
+                return month is >= 1 and <= 12 && year >= 2000
+                    ? $"Tháng {month} năm {year}"
+                    : periodLabel;
+            }
+
+            return periodLabel;
         }
 
         private static string ConvertAmountToVietnameseText(decimal amount)
@@ -513,4 +598,3 @@ namespace ElectricCalculation.Services
         }
     }
 }
-

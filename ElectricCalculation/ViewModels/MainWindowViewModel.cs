@@ -1,19 +1,22 @@
 using System;
+using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ElectricCalculation.Models;
+using ElectricCalculation.Services;
 
 namespace ElectricCalculation.ViewModels
 {
     public partial class MainWindowViewModel : ObservableObject
     {
-        private string? _lastImportedExcelPath;
+        private readonly UiService _ui;
 
         [ObservableProperty]
         private string periodLabel = string.Empty;
@@ -27,7 +30,7 @@ namespace ElectricCalculation.ViewModels
         [ObservableProperty]
         private Customer? selectedCustomer;
 
-        // Người lập đơn (in lên hóa đơn Excel)
+        // Invoice issuer (printed on the invoice).
         [ObservableProperty]
         private string invoiceIssuer = string.Empty;
 
@@ -47,6 +50,8 @@ namespace ElectricCalculation.ViewModels
 
         public MainWindowViewModel()
         {
+            _ui = new UiService();
+
             CustomersView = CollectionViewSource.GetDefaultView(Customers);
             CustomersView.Filter = FilterCustomer;
             Customers.CollectionChanged += Customers_CollectionChanged;
@@ -62,7 +67,17 @@ namespace ElectricCalculation.ViewModels
         [RelayCommand]
         private void AddRow()
         {
-            Customers.Add(new Customer());
+            var customer = new Customer();
+            customer.SequenceNumber = Customers.Count == 0
+                ? 1
+                : Customers.Max(c => c.SequenceNumber) + 1;
+
+            if (!string.IsNullOrWhiteSpace(InvoiceIssuer))
+            {
+                customer.PerformedBy = InvoiceIssuer;
+            }
+
+            Customers.Add(customer);
         }
 
         [RelayCommand]
@@ -73,10 +88,11 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
+            SelectedCustomer = null;
             Customers.Clear();
         }
 
-        // Thống kê theo danh sách đang hiển thị (đã lọc)
+        // Totals for the current (filtered) view.
         public int CustomerCount => CustomersView.Cast<Customer>().Count();
 
         public decimal TotalConsumption => CustomersView.Cast<Customer>().Sum(c => c.Consumption);
@@ -106,8 +122,6 @@ namespace ElectricCalculation.ViewModels
                 Customers.Add(item);
             }
 
-            _lastImportedExcelPath = filePath;
-
             if (!string.IsNullOrWhiteSpace(warningMessage))
             {
                 throw new WarningException(warningMessage);
@@ -116,6 +130,31 @@ namespace ElectricCalculation.ViewModels
             if (Customers.Count == 0)
             {
                 throw new WarningException("Import xong nhưng không có dòng dữ liệu nào. Hãy kiểm tra lại sheet 'Data' trong file Excel nguồn.");
+            }
+        }
+
+        [RelayCommand]
+        private void ImportFromExcelWithDialog()
+        {
+            var filePath = _ui.ShowOpenExcelFileDialog();
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            try
+            {
+                ImportFromExcel(filePath);
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("Cảnh báo import Excel", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi import Excel", ex.Message);
             }
         }
 
@@ -132,17 +171,43 @@ namespace ElectricCalculation.ViewModels
                 throw new WarningException("Không có dữ liệu trong bảng để export.");
             }
 
-            // Luôn dùng file template mặc định trong solution,
-            // không phụ thuộc vào file Excel vừa import.
-            var templatePath = GetDefaultTemplatePath();
+            // Always use the solution template,
+            // not the last imported workbook.
+            var templatePath = _ui.GetSummaryTemplatePath();
 
             Services.ExcelExportService.ExportToFile(
                 templatePath,
                 outputPath,
-                Customers);
+                Customers,
+                PeriodLabel);
         }
 
-        // Export 1 khách (dòng đang chọn) ra Excel theo template tổng hợp mặc định để in bằng Excel.
+        // Export the selected customer to the summary template (for printing in Excel).
+        [RelayCommand]
+        private void ExportToExcelWithDialog()
+        {
+            var outputPath = _ui.ShowSaveExcelFileDialog("Bang tong hop dien.xlsx");
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                return;
+            }
+
+            try
+            {
+                ExportToExcel(outputPath);
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("Cảnh báo export Excel", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi export Excel", ex.Message);
+            }
+        }
+
         [RelayCommand]
         private void ExportSelectionToExcel(string outputPath)
         {
@@ -158,15 +223,16 @@ namespace ElectricCalculation.ViewModels
 
             var list = new[] { SelectedCustomer };
 
-            var templatePath = GetDefaultTemplatePath();
+            var templatePath = _ui.GetSummaryTemplatePath();
 
             Services.ExcelExportService.ExportToFile(
                 templatePath,
                 outputPath,
-                list);
+                list,
+                PeriodLabel);
         }
 
-        // Export toàn bộ danh sách đang lọc ra Excel theo template tổng hợp mặc định (in theo nhóm/cụm).
+        // Export the filtered list to the summary template (for grouped printing).
         [RelayCommand]
         private void ExportFilteredToExcel(string outputPath)
         {
@@ -181,12 +247,134 @@ namespace ElectricCalculation.ViewModels
                 throw new WarningException("Không có dòng nào trong danh sách hiện tại để in.");
             }
 
-            var templatePath = GetDefaultTemplatePath();
+            var templatePath = _ui.GetSummaryTemplatePath();
 
             Services.ExcelExportService.ExportToFile(
                 templatePath,
                 outputPath,
-                filtered);
+                filtered,
+                PeriodLabel);
+        }
+
+        [RelayCommand]
+        private void PrintInvoiceWithDialog()
+        {
+            var outputPath = _ui.ShowSaveExcelFileDialog("Hoa don tien dien.xlsx");
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                return;
+            }
+
+            try
+            {
+                if (SelectedCustomer != null)
+                {
+                    var templatePath = _ui.GetInvoiceTemplatePath();
+
+                    InvoiceExcelExportService.ExportInvoice(
+                        templatePath,
+                        outputPath,
+                        SelectedCustomer,
+                        PeriodLabel,
+                        InvoiceIssuer);
+                }
+                else
+                {
+                    ExportFilteredToExcel(outputPath);
+                }
+
+                var openResult = _ui.Confirm(
+                    "In Excel",
+                    $"Đã tạo file Excel tại:\n{outputPath}\n\nBạn có muốn mở file này bằng Excel để xem / chỉnh sửa và in không?");
+
+                if (openResult)
+                {
+                    _ui.OpenWithDefaultApp(outputPath);
+                }
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("In Excel", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi in Excel", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void PrintMultipleInvoicesWithDialog(IList? selectedItems)
+        {
+            try
+            {
+                var selectedCustomers = selectedItems?.OfType<Customer>().ToList();
+
+                var customers = selectedCustomers != null && selectedCustomers.Count > 0
+                    ? selectedCustomers
+                    : CustomersView.Cast<Customer>().ToList();
+
+                if (customers.Count == 0)
+                {
+                    _ui.ShowMessage("In nhiều phiếu", "Không có dữ liệu trong danh sách hiện tại để in.");
+                    return;
+                }
+
+                var folder = _ui.ShowFolderPickerDialog("Chọn thư mục để lưu các hóa đơn");
+                if (string.IsNullOrWhiteSpace(folder))
+                {
+                    return;
+                }
+
+                var templatePath = _ui.GetInvoiceTemplatePath();
+
+                foreach (var customer in customers)
+                {
+                    var namePart = string.IsNullOrWhiteSpace(customer.Name)
+                        ? "Khach"
+                        : customer.Name;
+
+                    var meterPart = string.IsNullOrWhiteSpace(customer.MeterNumber)
+                        ? string.Empty
+                        : $" - {customer.MeterNumber}";
+
+                    var safeName = MakeSafeFileName($"{namePart}{meterPart}");
+                    var filePath = Path.Combine(folder, $"Hoa don - {safeName}.xlsx");
+
+                    InvoiceExcelExportService.ExportInvoice(
+                        templatePath,
+                        filePath,
+                        customer,
+                        PeriodLabel,
+                        InvoiceIssuer);
+                }
+
+                _ui.ShowMessage("In nhiều phiếu", $"Đã tạo {customers.Count} hóa đơn trong thư mục:\n{folder}");
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("In nhiều phiếu", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi in nhiều phiếu", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void ShowReport()
+        {
+            var currentItems = CustomersView.Cast<Customer>().ToList();
+            if (currentItems.Count == 0)
+            {
+                _ui.ShowMessage("Báo cáo", "Không có dữ liệu trong danh sách hiện tại để lập báo cáo.");
+                return;
+            }
+
+            _ui.ShowReportWindow(PeriodLabel, currentItems);
         }
 
         private void Customers_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -270,21 +458,15 @@ namespace ElectricCalculation.ViewModels
             OnPropertyChanged(nameof(TotalAmount));
         }
 
-        private static string GetDefaultTemplatePath()
+        private static string MakeSafeFileName(string name)
         {
-            // Mặc định dùng file mẫu tổng hợp cạnh solution:
-            // "Bảng tổng hợp thu tháng 6 năm 2025.xlsx"
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            // bin/Debug/net8.0-windows -> quay lên thư mục solution
-            var rootDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", ".."));
-            var templatePath = Path.Combine(rootDir, "Bảng tổng hợp thu tháng 6 năm 2025.xlsx");
-
-            if (!File.Exists(templatePath))
+            foreach (var c in Path.GetInvalidFileNameChars())
             {
-                throw new WarningException("Không tìm thấy file Excel template mặc định 'Bảng tổng hợp thu tháng 6 năm 2025.xlsx' cạnh solution.");
+                name = name.Replace(c, '_');
             }
 
-            return templatePath;
+            return string.IsNullOrWhiteSpace(name) ? "Hoa_don" : name;
         }
+
     }
 }

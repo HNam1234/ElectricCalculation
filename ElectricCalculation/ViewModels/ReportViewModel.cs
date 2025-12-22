@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using ElectricCalculation.Models;
+using ElectricCalculation.Services;
 
 namespace ElectricCalculation.ViewModels
 {
@@ -39,8 +43,11 @@ namespace ElectricCalculation.ViewModels
     {
         private const double MaxBarHeight = 180.0;
 
+        private readonly UiService _ui;
+
         private readonly decimal _maxKwh;
         private readonly decimal _maxAmount;
+        private readonly string _periodLabel;
         private readonly List<Customer> _sourceCustomers;
 
         public string Title { get; }
@@ -100,7 +107,18 @@ namespace ElectricCalculation.ViewModels
         }
 
         public ReportViewModel(string periodLabel, IEnumerable<Customer> customers)
+            : this(periodLabel, customers, new UiService())
         {
+        }
+
+        public ReportViewModel(
+            string periodLabel,
+            IEnumerable<Customer> customers,
+            UiService ui)
+        {
+            _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+
+            _periodLabel = periodLabel ?? string.Empty;
             Title = $"Thống kê theo nhóm - {periodLabel}";
 
             _sourceCustomers = customers?.ToList() ?? new List<Customer>();
@@ -146,6 +164,58 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
+        [RelayCommand]
+        private void PrintGroup()
+        {
+            var item = SelectedItem;
+            if (item == null)
+            {
+                _ui.ShowMessage("In Excel nhóm", "Hãy chọn một nhóm / đơn vị ở bảng bên phải trước.");
+                return;
+            }
+
+            var customers = GetCustomersForGroup(item).ToList();
+            if (customers.Count == 0)
+            {
+                _ui.ShowMessage("In Excel nhóm", "Nhóm được chọn hiện không có dữ liệu khách hàng.");
+                return;
+            }
+
+            var safeGroupName = MakeSafeFileName(item.GroupName);
+            var outputPath = _ui.ShowSaveExcelFileDialog(
+                $"Tien dien - {safeGroupName}.xlsx",
+                title: "In Excel nhóm");
+
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                return;
+            }
+
+            try
+            {
+                var templatePath = _ui.GetSummaryTemplatePath();
+                ExcelExportService.ExportToFile(templatePath, outputPath, customers, _periodLabel);
+            }
+            catch (WarningException warning)
+            {
+                _ui.ShowMessage("In Excel nhóm", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                _ui.ShowMessage("Lỗi in Excel nhóm", ex.Message);
+            }
+        }
+
+        private static string MakeSafeFileName(string name)
+        {
+            foreach (var c in Path.GetInvalidFileNameChars())
+            {
+                name = name.Replace(c, '_');
+            }
+
+            return string.IsNullOrWhiteSpace(name) ? "Tien_dien" : name;
+        }
+
         public IEnumerable<Customer> GetCustomersForGroup(ReportItem? item)
         {
             if (item == null)
@@ -174,4 +244,3 @@ namespace ElectricCalculation.ViewModels
         }
     }
 }
-
