@@ -179,7 +179,8 @@ namespace ElectricCalculation.Services
                     GroupName = GetString(cells, "C") ?? string.Empty,
                     Address = GetString(cells, "D") ?? string.Empty,
                     Phone = GetString(cells, "E") ?? string.Empty,
-                    MeterNumber = GetString(cells, "J") ?? string.Empty
+                    MeterNumber = GetString(cells, "J") ?? string.Empty,
+                    Location = GetString(cells, "L") ?? string.Empty
                 };
 
                 customer.CurrentIndex = GetDecimal(cells, "O");
@@ -221,4 +222,3 @@ namespace ElectricCalculation.Services
         }
     }
 }
-

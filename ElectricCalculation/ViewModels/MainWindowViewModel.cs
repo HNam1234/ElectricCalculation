@@ -27,7 +27,7 @@ namespace ElectricCalculation.ViewModels
         [ObservableProperty]
         private Customer? selectedCustomer;
 
-        // Người lập đơn (ký trên hóa đơn Excel)
+        // Người lập đơn (in lên hóa đơn Excel)
         [ObservableProperty]
         private string invoiceIssuer = string.Empty;
 
@@ -38,7 +38,7 @@ namespace ElectricCalculation.ViewModels
         public IReadOnlyList<string> SearchFields { get; } = new[]
         {
             "Tên khách",
-            "Nhóm/Đơn vị",
+            "Nhóm / Đơn vị",
             "Loại",
             "Địa chỉ",
             "Số ĐT",
@@ -76,7 +76,7 @@ namespace ElectricCalculation.ViewModels
             Customers.Clear();
         }
 
-        // Tổng theo danh sách đang hiển thị (đã lọc)
+        // Thống kê theo danh sách đang hiển thị (đã lọc)
         public int CustomerCount => CustomersView.Cast<Customer>().Count();
 
         public decimal TotalConsumption => CustomersView.Cast<Customer>().Sum(c => c.Consumption);
@@ -115,7 +115,7 @@ namespace ElectricCalculation.ViewModels
 
             if (Customers.Count == 0)
             {
-                throw new WarningException("Import xong nhưng không có dòng dữ liệu nào. Hãy kiểm tra lại sheet 'Data' trong file Excel.");
+                throw new WarningException("Import xong nhưng không có dòng dữ liệu nào. Hãy kiểm tra lại sheet 'Data' trong file Excel nguồn.");
             }
         }
 
@@ -132,19 +132,17 @@ namespace ElectricCalculation.ViewModels
                 throw new WarningException("Không có dữ liệu trong bảng để export.");
             }
 
-            if (string.IsNullOrWhiteSpace(_lastImportedExcelPath) ||
-                !File.Exists(_lastImportedExcelPath))
-            {
-                throw new WarningException("Bạn cần import một file Excel gốc (template) trước khi export.");
-            }
+            // Luôn dùng file template mặc định trong solution,
+            // không phụ thuộc vào file Excel vừa import.
+            var templatePath = GetDefaultTemplatePath();
 
             Services.ExcelExportService.ExportToFile(
-                _lastImportedExcelPath!,
+                templatePath,
                 outputPath,
                 Customers);
         }
 
-        // Export 1 khách (dòng đang chọn) ra Excel theo template mặc định để in bằng Excel.
+        // Export 1 khách (dòng đang chọn) ra Excel theo template tổng hợp mặc định để in bằng Excel.
         [RelayCommand]
         private void ExportSelectionToExcel(string outputPath)
         {
@@ -168,7 +166,7 @@ namespace ElectricCalculation.ViewModels
                 list);
         }
 
-        // Export toàn bộ danh sách đang lọc ra Excel theo template mặc định để in theo nhóm / cụm.
+        // Export toàn bộ danh sách đang lọc ra Excel theo template tổng hợp mặc định (in theo nhóm/cụm).
         [RelayCommand]
         private void ExportFilteredToExcel(string outputPath)
         {
@@ -243,7 +241,7 @@ namespace ElectricCalculation.ViewModels
 
             string fieldValue = SelectedSearchField switch
             {
-                "Nhóm/Đơn vị" => customer.GroupName ?? string.Empty,
+                "Nhóm / Đơn vị" => customer.GroupName ?? string.Empty,
                 "Loại" => customer.Category ?? string.Empty,
                 "Địa chỉ" => customer.Address ?? string.Empty,
                 "Số ĐT" => customer.Phone ?? string.Empty,
@@ -274,7 +272,7 @@ namespace ElectricCalculation.ViewModels
 
         private static string GetDefaultTemplatePath()
         {
-            // Mặc định dùng file mẫu gốc đặt cạnh solution:
+            // Mặc định dùng file mẫu tổng hợp cạnh solution:
             // "Bảng tổng hợp thu tháng 6 năm 2025.xlsx"
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             // bin/Debug/net8.0-windows -> quay lên thư mục solution

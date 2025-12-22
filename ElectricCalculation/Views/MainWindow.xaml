@@ -6,8 +6,9 @@
         xmlns:vm="clr-namespace:ElectricCalculation.ViewModels"
         mc:Ignorable="d"
         Title="Electric Calculation"
-        Height="600"
-        Width="1100">
+        Height="720"
+        Width="1280"
+        WindowStartupLocation="CenterScreen">
     <Window.DataContext>
         <vm:MainWindowViewModel />
     </Window.DataContext>
@@ -19,7 +20,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Top toolbar -->
+        <!-- Thanh công cụ trên -->
         <StackPanel Orientation="Horizontal"
                     Grid.Row="0"
                     Margin="0,0,0,8">
@@ -50,6 +51,16 @@
                     Padding="12,4"
                     Click="PrintInvoice_Click" />
 
+            <Button Content="In nhiều phiếu"
+                    Margin="8,0,0,0"
+                    Padding="12,4"
+                    Click="PrintMultipleInvoices_Click" />
+
+            <Button Content="Thống kê"
+                    Margin="16,0,0,0"
+                    Padding="12,4"
+                    Click="ShowReport_Click" />
+
             <TextBlock Text="Người lập đơn:"
                        VerticalAlignment="Center"
                        Margin="24,0,4,0" />
@@ -70,20 +81,21 @@
                      Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         </StackPanel>
 
-        <!-- Main grid -->
+        <!-- Lưới chính -->
         <DataGrid x:Name="CustomerGrid"
                   Grid.Row="1"
                   ItemsSource="{Binding CustomersView}"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
                   IsReadOnly="False"
+                  SelectionMode="Extended"
                   SelectedItem="{Binding SelectedCustomer, Mode=TwoWay}"
                   PreviewMouseWheel="DataGrid_PreviewMouseWheel">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Tên khách"
                                     Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                                     Width="2*" />
-                <DataGridTextColumn Header="Nhóm/Đơn vị"
+                <DataGridTextColumn Header="Nhóm / Đơn vị"
                                     Binding="{Binding GroupName, UpdateSourceTrigger=PropertyChanged}"
                                     Width="2*" />
                 <DataGridTextColumn Header="Loại"
@@ -119,7 +131,7 @@
                                     IsReadOnly="True"
                                     Binding="{Binding Consumption, StringFormat=N0}"
                                     Width="*" />
-                <DataGridTextColumn Header="KWh tính tiền"
+                <DataGridTextColumn Header="kWh tính tiền"
                                     IsReadOnly="True"
                                     Binding="{Binding ChargeableKwh, StringFormat=N0}"
                                     Width="*" />
@@ -130,7 +142,7 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Bottom summary + clear button -->
+        <!-- Thanh tổng kết + nút xóa -->
         <Grid Grid.Row="2"
               Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
@@ -145,7 +157,7 @@
                 <TextBlock Margin="0,0,16,0"
                            Text="{Binding TotalConsumption, StringFormat='Tổng kWh: {0:N0}'}" />
                 <TextBlock Margin="0,0,16,0"
-                           Text="{Binding TotalChargeableKwh, StringFormat='KWh tính tiền: {0:N0}'}" />
+                           Text="{Binding TotalChargeableKwh, StringFormat='kWh tính tiền: {0:N0}'}" />
                 <TextBlock Text="{Binding TotalAmount, StringFormat='Tổng tiền: {0:N0} VNĐ'}" />
             </StackPanel>
 

@@ -23,6 +23,10 @@ namespace ElectricCalculation.Models
         [ObservableProperty]
         private string meterNumber = string.Empty;
 
+        // Vị trí đặt công tơ (nếu có)
+        [ObservableProperty]
+        private string location = string.Empty;
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Consumption))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]

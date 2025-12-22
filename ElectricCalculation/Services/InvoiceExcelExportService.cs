@@ -33,15 +33,13 @@ namespace ElectricCalculation.Services
                 throw new ArgumentNullException(nameof(customer));
             }
 
+            // Copy template to output so we never modify the original file.
             File.Copy(templatePath, outputPath, overwrite: true);
 
             using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Update);
 
-            var workbookEntry = archive.GetEntry("xl/workbook.xml");
-            if (workbookEntry == null)
-            {
-                throw new InvalidOperationException("Invoice template is invalid: missing xl/workbook.xml.");
-            }
+            var workbookEntry = archive.GetEntry("xl/workbook.xml")
+                ?? throw new InvalidOperationException("Invoice template is invalid: missing xl/workbook.xml.");
 
             XDocument workbookDoc;
             using (var workbookStream = workbookEntry.Open())
@@ -53,20 +51,14 @@ namespace ElectricCalculation.Services
             XNamespace relNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
             XNamespace relPackageNs = "http://schemas.openxmlformats.org/package/2006/relationships";
 
-            var sheetsElement = workbookDoc.Root?.Element(mainNs + "sheets");
-            if (sheetsElement == null)
-            {
-                throw new InvalidOperationException("Invoice template is invalid: sheets collection not found.");
-            }
+            var sheetsElement = workbookDoc.Root?.Element(mainNs + "sheets")
+                ?? throw new InvalidOperationException("Invoice template is invalid: sheets collection not found.");
 
+            // Template chỉ có 1 sheet nên lấy sheet đầu tiên.
             var invoiceSheetElement = sheetsElement
                 .Elements(mainNs + "sheet")
-                .FirstOrDefault();
-
-            if (invoiceSheetElement == null)
-            {
-                throw new InvalidOperationException("Invoice template is invalid: no worksheet found.");
-            }
+                .FirstOrDefault()
+                ?? throw new InvalidOperationException("Invoice template is invalid: no worksheet found.");
 
             var relIdAttributeName = XName.Get("id", relNs.NamespaceName);
             var relId = (string?)invoiceSheetElement.Attribute(relIdAttributeName);
@@ -75,11 +67,8 @@ namespace ElectricCalculation.Services
                 throw new InvalidOperationException("Invoice template is invalid: worksheet has no relationship id.");
             }
 
-            var relEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
-            if (relEntry == null)
-            {
-                throw new InvalidOperationException("Invoice template is invalid: missing xl/_rels/workbook.xml.rels.");
-            }
+            var relEntry = archive.GetEntry("xl/_rels/workbook.xml.rels")
+                ?? throw new InvalidOperationException("Invoice template is invalid: missing xl/_rels/workbook.xml.rels.");
 
             XDocument relDoc;
             using (var relStream = relEntry.Open())
@@ -100,15 +89,12 @@ namespace ElectricCalculation.Services
                 throw new InvalidOperationException("Invoice template is invalid: cannot locate worksheet content.");
             }
 
-            var sheetPath = target!.StartsWith("/", StringComparison.Ordinal)
+            var sheetPath = target.StartsWith("/", StringComparison.Ordinal)
                 ? "xl" + target
                 : "xl/" + target;
 
-            var sheetEntry = archive.GetEntry(sheetPath);
-            if (sheetEntry == null)
-            {
-                throw new InvalidOperationException($"Invoice template is invalid: missing {sheetPath}.");
-            }
+            var sheetEntry = archive.GetEntry(sheetPath)
+                ?? throw new InvalidOperationException($"Invoice template is invalid: missing {sheetPath}.");
 
             XDocument sheetDoc;
             using (var sheetReadStream = sheetEntry.Open())
@@ -116,20 +102,15 @@ namespace ElectricCalculation.Services
                 sheetDoc = XDocument.Load(sheetReadStream);
             }
 
-            var sheetDataElement = sheetDoc.Root?.Element(mainNs + "sheetData");
-            if (sheetDataElement == null)
-            {
-                throw new InvalidOperationException("Invoice template worksheet has no sheetData section.");
-            }
+            var sheetDataElement = sheetDoc.Root?.Element(mainNs + "sheetData")
+                ?? throw new InvalidOperationException("Invoice template worksheet has no sheetData section.");
 
-            // Remove calcChain so Excel does not complain about stale formula chain.
+            // Xoá calcChain để Excel không cảnh báo "We found a problem with some content..."
+            const string calcChainType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
+
             var calcChainRelationship = relationshipsRoot
                 .Elements(relPackageNs + "Relationship")
-                .FirstOrDefault(r =>
-                    string.Equals(
-                        (string?)r.Attribute("Type"),
-                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain",
-                        StringComparison.Ordinal));
+                .FirstOrDefault(r => string.Equals((string?)r.Attribute("Type"), calcChainType, StringComparison.Ordinal));
 
             if (calcChainRelationship != null)
             {
@@ -138,12 +119,11 @@ namespace ElectricCalculation.Services
 
                 if (!string.IsNullOrWhiteSpace(calcTarget))
                 {
-                    var calcPath = calcTarget!.StartsWith("/", StringComparison.Ordinal)
+                    var calcPath = calcTarget.StartsWith("/", StringComparison.Ordinal)
                         ? "xl" + calcTarget
                         : "xl/" + calcTarget;
 
-                    var calcEntry = archive.GetEntry(calcPath);
-                    calcEntry?.Delete();
+                    archive.GetEntry(calcPath)?.Delete();
                 }
 
                 using var relWriteStream = relEntry.Open();
@@ -157,11 +137,12 @@ namespace ElectricCalculation.Services
             var name = customer.Name?.Trim() ?? string.Empty;
             var groupName = customer.GroupName?.Trim() ?? string.Empty;
             var address = customer.Address?.Trim() ?? string.Empty;
+            var location = customer.Location?.Trim() ?? string.Empty;
             var phone = customer.Phone?.Trim() ?? string.Empty;
             var meterNumber = customer.MeterNumber?.Trim() ?? string.Empty;
 
-            // Header texts
-            UpdateTextCell(sheetDataElement, mainNs, "A4", "Số phiếu: 1");
+            // Header: kỳ, số phiếu, kênh gửi, địa chỉ, điện thoại, đại diện...
+            UpdateTextCell(sheetDataElement, mainNs, "I4", "Số phiếu: 1");
 
             if (!string.IsNullOrWhiteSpace(period))
             {
@@ -189,6 +170,7 @@ namespace ElectricCalculation.Services
                 UpdateTextCell(sheetDataElement, mainNs, "A8", $"Đại diện: {name}.");
             }
 
+            // Dòng I8 trong template là điện thoại người đại diện -> để trống cho đơn giản.
             UpdateTextCell(sheetDataElement, mainNs, "I8", string.Empty);
 
             if (!string.IsNullOrWhiteSpace(meterNumber))
@@ -213,17 +195,24 @@ namespace ElectricCalculation.Services
             // H13: thành tiền
             UpdateNumberCell(sheetDataElement, mainNs, "H13", amount);
 
-            // I13: vị trí đặt – hiện chưa có cột riêng, tạm để trống.
-            UpdateTextCell(sheetDataElement, mainNs, "I13", string.Empty);
+            // I13: Vị trí đặt công tơ (nếu có)
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                UpdateTextCell(sheetDataElement, mainNs, "I13", $"Vị trí đặt: {location}.");
+            }
+            else
+            {
+                UpdateTextCell(sheetDataElement, mainNs, "I13", string.Empty);
+            }
 
-            // A19: tiền bằng chữ (thay cho công thức tùy biến ban đầu).
+            // A19: số tiền bằng chữ
             var amountText = ConvertAmountToVietnameseText(amount);
             if (!string.IsNullOrWhiteSpace(amountText))
             {
                 UpdateTextCell(sheetDataElement, mainNs, "A19", $"Bằng chữ: {amountText}./.");
             }
 
-            // H21: người lập đơn (ký tên).
+            // H21: Người lập đơn
             if (!string.IsNullOrWhiteSpace(issuer))
             {
                 UpdateTextCell(sheetDataElement, mainNs, "H21", issuer);
@@ -251,7 +240,10 @@ namespace ElectricCalculation.Services
 
             var row = sheetDataElement
                 .Elements(ns + "row")
-                .FirstOrDefault(r => string.Equals((string?)r.Attribute("r"), rowIndex.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
+                .FirstOrDefault(r => string.Equals(
+                    (string?)r.Attribute("r"),
+                    rowIndex.ToString(CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal));
 
             if (row == null)
             {
@@ -260,7 +252,10 @@ namespace ElectricCalculation.Services
 
             var cell = row
                 .Elements(ns + "c")
-                .FirstOrDefault(c => string.Equals((string?)c.Attribute("r"), cellReference, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(c => string.Equals(
+                    (string?)c.Attribute("r"),
+                    cellReference,
+                    StringComparison.OrdinalIgnoreCase));
 
             if (cell == null)
             {
@@ -286,8 +281,7 @@ namespace ElectricCalculation.Services
             }
 
             cell.SetAttributeValue("t", "inlineStr");
-            var isElement = new XElement(ns + "is",
-                new XElement(ns + "t", text));
+            var isElement = new XElement(ns + "is", new XElement(ns + "t", text));
             cell.Add(isElement);
 
             if (!string.IsNullOrEmpty(styleAttr))
@@ -311,7 +305,10 @@ namespace ElectricCalculation.Services
 
             var row = sheetDataElement
                 .Elements(ns + "row")
-                .FirstOrDefault(r => string.Equals((string?)r.Attribute("r"), rowIndex.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
+                .FirstOrDefault(r => string.Equals(
+                    (string?)r.Attribute("r"),
+                    rowIndex.ToString(CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal));
 
             if (row == null)
             {
@@ -320,7 +317,10 @@ namespace ElectricCalculation.Services
 
             var cell = row
                 .Elements(ns + "c")
-                .FirstOrDefault(c => string.Equals((string?)c.Attribute("r"), cellReference, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(c => string.Equals(
+                    (string?)c.Attribute("r"),
+                    cellReference,
+                    StringComparison.OrdinalIgnoreCase));
 
             if (cell == null)
             {
@@ -347,20 +347,17 @@ namespace ElectricCalculation.Services
         private static int GetRowIndex(string cellReference)
         {
             var digits = new string(cellReference.SkipWhile(char.IsLetter).ToArray());
-            if (int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rowIndex))
-            {
-                return rowIndex;
-            }
-
-            return 0;
+            return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rowIndex)
+                ? rowIndex
+                : 0;
         }
 
         private static string ConvertAmountToVietnameseText(decimal amount)
         {
             var rounded = Math.Round(amount, 0, MidpointRounding.AwayFromZero);
-            if (rounded == 0)
+            if (rounded <= 0)
             {
-                return "không đồng";
+                return "Không đồng";
             }
 
             var value = (long)rounded;
@@ -369,13 +366,13 @@ namespace ElectricCalculation.Services
                 value = -value;
             }
 
-            string[] units =
+            string[] unitNumbers =
             {
                 "không", "một", "hai", "ba", "bốn",
                 "năm", "sáu", "bảy", "tám", "chín"
             };
 
-            string[] groupUnits =
+            string[] placeValues =
             {
                 string.Empty,
                 "nghìn",
@@ -397,7 +394,7 @@ namespace ElectricCalculation.Services
                 {
                     if (hundreds > 0)
                     {
-                        sb.Append(units[hundreds]).Append(" trăm");
+                        sb.Append(unitNumbers[hundreds]).Append(" trăm");
                     }
                     else if (!isFirstGroup)
                     {
@@ -412,7 +409,7 @@ namespace ElectricCalculation.Services
                         sb.Append(' ');
                     }
 
-                    sb.Append(units[tens]).Append(" mươi");
+                    sb.Append(unitNumbers[tens]).Append(" mươi");
 
                     if (ones == 1)
                     {
@@ -428,7 +425,7 @@ namespace ElectricCalculation.Services
                     }
                     else if (ones > 0)
                     {
-                        sb.Append(' ').Append(units[ones]);
+                        sb.Append(' ').Append(unitNumbers[ones]);
                     }
                 }
                 else if (tens == 1)
@@ -454,34 +451,33 @@ namespace ElectricCalculation.Services
                     }
                     else if (ones > 0)
                     {
-                        sb.Append(' ').Append(units[ones]);
+                        sb.Append(' ').Append(unitNumbers[ones]);
                     }
                 }
                 else if (tens == 0 && ones > 0)
                 {
                     if (sb.Length > 0)
                     {
-                        sb.Append(' ');
-                        sb.Append("lẻ ");
+                        sb.Append(" lẻ");
                     }
 
                     if (ones == 5 && sb.Length > 0)
                     {
-                        sb.Append("năm");
+                        sb.Append(" năm");
                     }
                     else
                     {
-                        sb.Append(units[ones]);
+                        sb.Append(' ').Append(unitNumbers[ones]);
                     }
                 }
 
-                return sb.ToString();
+                return sb.ToString().Trim();
             }
 
             var resultBuilder = new StringBuilder();
             var groupIndex = 0;
 
-            while (value > 0 && groupIndex < groupUnits.Length)
+            while (value > 0 && groupIndex < placeValues.Length)
             {
                 var groupNumber = (int)(value % 1000);
                 if (groupNumber > 0)
@@ -489,7 +485,7 @@ namespace ElectricCalculation.Services
                     var groupText = ReadThreeDigits(groupNumber, value < 1000 && groupIndex == 0);
                     if (!string.IsNullOrEmpty(groupText))
                     {
-                        var unitText = groupUnits[groupIndex];
+                        var unitText = placeValues[groupIndex];
                         if (resultBuilder.Length == 0)
                         {
                             resultBuilder.Insert(0, groupText + (string.IsNullOrEmpty(unitText) ? string.Empty : " " + unitText));
