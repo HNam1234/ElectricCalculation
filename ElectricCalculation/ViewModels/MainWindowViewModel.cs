@@ -19,6 +19,9 @@ namespace ElectricCalculation.ViewModels
         private readonly UiService _ui;
 
         [ObservableProperty]
+        private string? currentDataFilePath;
+
+        [ObservableProperty]
         private string periodLabel = string.Empty;
 
         [ObservableProperty]
@@ -133,6 +136,7 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
+
         [RelayCommand]
         private void ImportFromExcelWithDialog()
         {
@@ -179,7 +183,8 @@ namespace ElectricCalculation.ViewModels
                 templatePath,
                 outputPath,
                 Customers,
-                PeriodLabel);
+                PeriodLabel,
+                InvoiceIssuer);
         }
 
         // Export the selected customer to the summary template (for printing in Excel).
@@ -209,6 +214,170 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
+        private void OpenDataFileWithDialog()
+        {
+            var filePath = _ui.ShowOpenDataFileDialog();
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            try
+            {
+                var (period, customers) = ProjectFileService.Load(filePath);
+
+                Customers.Clear();
+                foreach (var c in customers)
+                {
+                    Customers.Add(c);
+                }
+
+                if (!string.IsNullOrWhiteSpace(period))
+                {
+                    PeriodLabel = period;
+                }
+
+                CurrentDataFilePath = filePath;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi mở dữ liệu", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void SaveDataFileWithDialog()
+        {
+            var outputPath = CurrentDataFilePath;
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                outputPath = _ui.ShowSaveDataFileDialog("Du_lieu_tien_dien.json", title: "Lưu dữ liệu");
+            }
+
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                return;
+            }
+
+            try
+            {
+                ProjectFileService.Save(outputPath, PeriodLabel, Customers);
+                CurrentDataFilePath = outputPath;
+                _ui.ShowMessage("Lưu dữ liệu", $"Đã lưu dữ liệu tại:\n{outputPath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi lưu dữ liệu", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void NewPeriodWithDialog()
+        {
+            var vm = _ui.ShowNewPeriodDialog();
+            if (vm == null)
+            {
+                return;
+            }
+
+            if (vm.Month is < 1 or > 12 || vm.Year < 2000)
+            {
+                _ui.ShowMessage("Làm tháng mới", "Tháng/Năm không hợp lệ.");
+                return;
+            }
+
+            var newCustomers = vm.CopyCustomers
+                ? Customers.OrderBy(c => c.SequenceNumber).Select(CloneCustomer).ToList()
+                : new List<Customer>();
+
+            if (vm.CopyCustomers)
+            {
+                foreach (var c in newCustomers)
+                {
+                    if (vm.MoveCurrentToPrevious)
+                    {
+                        c.PreviousIndex = c.CurrentIndex;
+                    }
+
+                    if (vm.ResetCurrentToZero)
+                    {
+                        c.CurrentIndex = 0;
+                    }
+                }
+            }
+
+            Customers.Clear();
+            foreach (var c in newCustomers)
+            {
+                Customers.Add(c);
+            }
+
+            SelectedCustomer = null;
+            PeriodLabel = vm.PeriodLabel;
+            CurrentDataFilePath = null;
+        }
+
+        [RelayCommand]
+        private void PrintInvoicesByRangeWithDialog()
+        {
+            var max = Customers.Any() ? Customers.Max(c => c.SequenceNumber) : 1;
+            var range = _ui.ShowPrintRangeDialog(defaultFrom: 1, defaultTo: max);
+            if (range == null)
+            {
+                return;
+            }
+
+            var from = Math.Min(range.FromNumber, range.ToNumber);
+            var to = Math.Max(range.FromNumber, range.ToNumber);
+
+            var customers = Customers
+                .Where(c => c.SequenceNumber >= from && c.SequenceNumber <= to)
+                .OrderBy(c => c.SequenceNumber)
+                .ToList();
+
+            if (customers.Count == 0)
+            {
+                _ui.ShowMessage("In theo số phiếu", "Không có khách nào trong khoảng số phiếu đã chọn.");
+                return;
+            }
+
+            var folder = _ui.ShowFolderPickerDialog("Chọn thư mục để lưu các hóa đơn");
+            if (string.IsNullOrWhiteSpace(folder))
+            {
+                return;
+            }
+
+            try
+            {
+                var templatePath = _ui.GetInvoiceTemplatePath();
+
+                foreach (var customer in customers)
+                {
+                    var namePart = string.IsNullOrWhiteSpace(customer.Name) ? "Khach" : customer.Name;
+                    var meterPart = string.IsNullOrWhiteSpace(customer.MeterNumber) ? string.Empty : $" - {customer.MeterNumber}";
+                    var safeName = MakeSafeFileName($"{customer.SequenceNumber:0000} - {namePart}{meterPart}");
+                    var filePath = Path.Combine(folder, $"Hoa don - {safeName}.xlsx");
+
+                    InvoiceExcelExportService.ExportInvoice(
+                        templatePath,
+                        filePath,
+                        customer,
+                        PeriodLabel,
+                        InvoiceIssuer);
+                }
+
+                _ui.ShowMessage("In theo số phiếu", $"Đã tạo {customers.Count} hóa đơn trong thư mục:\n{folder}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi in theo số phiếu", ex.Message);
+            }
+        }
+
+        [RelayCommand]
         private void ExportSelectionToExcel(string outputPath)
         {
             if (string.IsNullOrWhiteSpace(outputPath))
@@ -229,7 +398,8 @@ namespace ElectricCalculation.ViewModels
                 templatePath,
                 outputPath,
                 list,
-                PeriodLabel);
+                PeriodLabel,
+                InvoiceIssuer);
         }
 
         // Export the filtered list to the summary template (for grouped printing).
@@ -253,7 +423,8 @@ namespace ElectricCalculation.ViewModels
                 templatePath,
                 outputPath,
                 filtered,
-                PeriodLabel);
+                PeriodLabel,
+                InvoiceIssuer);
         }
 
         [RelayCommand]
@@ -374,7 +545,7 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
-            _ui.ShowReportWindow(PeriodLabel, currentItems);
+            _ui.ShowReportWindow(PeriodLabel, currentItems, InvoiceIssuer);
         }
 
         private void Customers_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -466,6 +637,33 @@ namespace ElectricCalculation.ViewModels
             }
 
             return string.IsNullOrWhiteSpace(name) ? "Hoa_don" : name;
+        }
+
+        private static Customer CloneCustomer(Customer source)
+        {
+            return new Customer
+            {
+                SequenceNumber = source.SequenceNumber,
+                Name = source.Name ?? string.Empty,
+                GroupName = source.GroupName ?? string.Empty,
+                Category = source.Category ?? string.Empty,
+                Address = source.Address ?? string.Empty,
+                RepresentativeName = source.RepresentativeName ?? string.Empty,
+                HouseholdPhone = source.HouseholdPhone ?? string.Empty,
+                Phone = source.Phone ?? string.Empty,
+                BuildingName = source.BuildingName ?? string.Empty,
+                MeterNumber = source.MeterNumber ?? string.Empty,
+                Substation = source.Substation ?? string.Empty,
+                Page = source.Page ?? string.Empty,
+                PerformedBy = source.PerformedBy ?? string.Empty,
+                Location = source.Location ?? string.Empty,
+                PreviousIndex = source.PreviousIndex,
+                CurrentIndex = source.CurrentIndex,
+                Multiplier = source.Multiplier <= 0 ? 1 : source.Multiplier,
+                SubsidizedKwh = source.SubsidizedKwh,
+                SubsidizedPercent = source.SubsidizedPercent,
+                UnitPrice = source.UnitPrice
+            };
         }
 
     }

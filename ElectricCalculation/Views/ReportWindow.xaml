@@ -3,13 +3,17 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        xmlns:converters="clr-namespace:ElectricCalculation.Converters"
         mc:Ignorable="d"
         Title="{Binding Title}"
         Height="540"
         Width="1000"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <converters:RatioToHeightConverter x:Key="RatioToHeightConverter" />
     </Window.Resources>
 
     <Grid Margin="12">
@@ -84,7 +88,7 @@
                                         <!-- Bars + axes -->
                                         <RowDefinition Height="*" />
                                         <!-- X-axis labels -->
-                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="160" />
                                     </Grid.RowDefinitions>
 
                                     <!-- kWh Y-axis -->
@@ -92,7 +96,6 @@
                                           Grid.Column="0"
                                           Margin="0,0,4,16">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
@@ -123,7 +126,7 @@
                                                    HorizontalAlignment="Right"
                                                    VerticalAlignment="Top"
                                                    Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="4"
+                                        <TextBlock Grid.RowSpan="4"
                                                    Text="{Binding KwhTick0}"
                                                    FontSize="9"
                                                    HorizontalAlignment="Right"
@@ -136,7 +139,6 @@
                                           Grid.Column="1"
                                           Margin="0,0,0,16">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
@@ -156,42 +158,52 @@
                                         <Border Grid.Row="3"
                                                 BorderBrush="#FFE0E0E0"
                                                 BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="4"
+                                        <Border Grid.RowSpan="4"
                                                 BorderBrush="#FFB0B0B0"
-                                                BorderThickness="0,1,0,1" />
+                                                BorderThickness="0,0,0,1" />
 
                                         <!-- Y-axis -->
-                                        <Border Grid.RowSpan="5"
+                                        <Border Grid.RowSpan="4"
                                                 HorizontalAlignment="Left"
                                                 BorderBrush="#FF808080"
                                                 BorderThickness="1,0,0,0" />
 
                                         <!-- Bars -->
-                                        <ItemsControl Grid.RowSpan="5"
+                                        <ItemsControl Grid.RowSpan="4"
                                                       Margin="6,0,0,0"
-                                                      ItemsSource="{Binding Items}">
+                                                      ItemsSource="{Binding Items}"
+                                                      VerticalAlignment="Stretch">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
-                                                    <UniformGrid Rows="1"
-                                                                 VerticalAlignment="Bottom" />
+                                                    <StackPanel Orientation="Horizontal"
+                                                                VerticalAlignment="Stretch" />
                                                 </ItemsPanelTemplate>
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="4,0"
-                                                            Height="{Binding KwhBarHeight}">
-                                                        <Border.Style>
-                                                            <Style TargetType="Border">
-                                                                <Setter Property="Background" Value="SteelBlue" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsSelected}"
-                                                                                 Value="True">
-                                                                        <Setter Property="Background" Value="Red" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Border.Style>
-                                                    </Border>
+                                                    <Grid Margin="2,0"
+                                                          Width="16"
+                                                          Height="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=ActualHeight}">
+                                                        <Border VerticalAlignment="Bottom">
+                                                            <Border.Height>
+                                                                <MultiBinding Converter="{StaticResource RatioToHeightConverter}">
+                                                                    <Binding Path="KwhBarRatio" />
+                                                                    <Binding RelativeSource="{RelativeSource AncestorType=ItemsControl}" Path="ActualHeight" />
+                                                                </MultiBinding>
+                                                            </Border.Height>
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="SteelBlue" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSelected}"
+                                                                                     Value="True">
+                                                                            <Setter Property="Background" Value="Red" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                        </Border>
+                                                    </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -204,16 +216,25 @@
                                                   ItemsSource="{Binding Items}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <UniformGrid Rows="1" />
+                                                <StackPanel Orientation="Horizontal" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding GroupName}"
-                                                           Margin="4,2,4,0"
-                                                           TextWrapping="Wrap"
-                                                           FontSize="9"
-                                                           TextAlignment="Center" />
+                                                <Border Width="16"
+                                                        Height="150"
+                                                        Margin="2,2,2,0"
+                                                        ClipToBounds="True">
+                                                    <TextBlock Text="{Binding GroupName}"
+                                                               FontSize="9"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding GroupName}">
+                                                        <TextBlock.LayoutTransform>
+                                                            <RotateTransform Angle="-90" />
+                                                        </TextBlock.LayoutTransform>
+                                                    </TextBlock>
+                                                </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -234,7 +255,7 @@
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*" />
-                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="160" />
                                     </Grid.RowDefinitions>
 
                                     <!-- Amount Y-axis -->
@@ -242,7 +263,6 @@
                                           Grid.Column="0"
                                           Margin="0,0,4,16">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
@@ -273,7 +293,7 @@
                                                    HorizontalAlignment="Right"
                                                    VerticalAlignment="Top"
                                                    Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="4"
+                                        <TextBlock Grid.RowSpan="4"
                                                    Text="{Binding AmountTick0}"
                                                    FontSize="9"
                                                    HorizontalAlignment="Right"
@@ -286,7 +306,6 @@
                                           Grid.Column="1"
                                           Margin="0,0,0,16">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="*" />
@@ -305,40 +324,50 @@
                                         <Border Grid.Row="3"
                                                 BorderBrush="#FFE0E0E0"
                                                 BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="4"
+                                        <Border Grid.RowSpan="4"
                                                 BorderBrush="#FFB0B0B0"
-                                                BorderThickness="0,1,0,1" />
+                                                BorderThickness="0,0,0,1" />
 
-                                        <Border Grid.RowSpan="5"
+                                        <Border Grid.RowSpan="4"
                                                 HorizontalAlignment="Left"
                                                 BorderBrush="#FF808080"
                                                 BorderThickness="1,0,0,0" />
 
-                                        <ItemsControl Grid.RowSpan="5"
+                                        <ItemsControl Grid.RowSpan="4"
                                                       Margin="6,0,0,0"
-                                                      ItemsSource="{Binding Items}">
+                                                      ItemsSource="{Binding Items}"
+                                                      VerticalAlignment="Stretch">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
-                                                    <UniformGrid Rows="1"
-                                                                 VerticalAlignment="Bottom" />
+                                                    <StackPanel Orientation="Horizontal"
+                                                                VerticalAlignment="Stretch" />
                                                 </ItemsPanelTemplate>
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="4,0"
-                                                            Height="{Binding AmountBarHeight}">
-                                                        <Border.Style>
-                                                            <Style TargetType="Border">
-                                                                <Setter Property="Background" Value="SteelBlue" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsSelected}"
-                                                                                 Value="True">
-                                                                        <Setter Property="Background" Value="Red" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Border.Style>
-                                                    </Border>
+                                                    <Grid Margin="2,0"
+                                                          Width="16"
+                                                          Height="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=ActualHeight}">
+                                                        <Border VerticalAlignment="Bottom">
+                                                            <Border.Height>
+                                                                <MultiBinding Converter="{StaticResource RatioToHeightConverter}">
+                                                                    <Binding Path="AmountBarRatio" />
+                                                                    <Binding RelativeSource="{RelativeSource AncestorType=ItemsControl}" Path="ActualHeight" />
+                                                                </MultiBinding>
+                                                            </Border.Height>
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="SteelBlue" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSelected}"
+                                                                                     Value="True">
+                                                                            <Setter Property="Background" Value="Red" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                        </Border>
+                                                    </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -351,16 +380,25 @@
                                                   ItemsSource="{Binding Items}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <UniformGrid Rows="1" />
+                                                <StackPanel Orientation="Horizontal" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding GroupName}"
-                                                           Margin="4,2,4,0"
-                                                           TextWrapping="Wrap"
-                                                           FontSize="9"
-                                                           TextAlignment="Center" />
+                                                <Border Width="16"
+                                                        Height="150"
+                                                        Margin="2,2,2,0"
+                                                        ClipToBounds="True">
+                                                    <TextBlock Text="{Binding GroupName}"
+                                                               FontSize="9"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding GroupName}">
+                                                        <TextBlock.LayoutTransform>
+                                                            <RotateTransform Angle="-90" />
+                                                        </TextBlock.LayoutTransform>
+                                                    </TextBlock>
+                                                </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -415,14 +453,14 @@
                            Text="{Binding GrandTotalAmount, StringFormat='Tổng tiền: {0:N0} VNĐ'}" />
             </StackPanel>
 
-            <Button Content="In Excel nhóm"
+            <Button Content="In hóa đơn nhóm"
                     Width="120"
                     Margin="0,0,8,0"
                     Command="{Binding PrintGroupCommand}" />
 
             <Button Content="Đóng"
                     Width="90"
-                    Click="CloseButton_Click" />
+                    Command="{Binding CloseCommand}" />
         </StackPanel>
     </Grid>
 </Window>

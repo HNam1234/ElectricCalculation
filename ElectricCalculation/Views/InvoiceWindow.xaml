@@ -3,11 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
         mc:Ignorable="d"
         Title="Hóa đơn tiền điện"
         Height="450"
         Width="600"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
     <Grid x:Name="InvoiceRoot" Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -50,7 +52,7 @@
                         <TextBlock Text="{Binding Customer.PreviousIndex, StringFormat='Chỉ số cũ: {0:N0}'}" />
                         <TextBlock Text="{Binding Customer.CurrentIndex, StringFormat='Chỉ số mới: {0:N0}'}" />
                         <TextBlock Text="{Binding Customer.Multiplier, StringFormat='Hệ số: {0:N2}'}" />
-                        <TextBlock Text="{Binding Customer.SubsidizedKwh, StringFormat='Bao cấp (kWh): {0:N0}'}" />
+                        <TextBlock Text="{Binding Customer.EffectiveSubsidizedKwh, StringFormat='Bao cấp (kWh): {0:N0}'}" />
                         <TextBlock Text="{Binding Customer.UnitPrice, StringFormat='Đơn giá (VNĐ/kWh): {0:N0}'}" />
                     </StackPanel>
 
@@ -71,10 +73,11 @@
             <Button Content="In"
                     Width="80"
                     Margin="0,0,8,0"
-                    Click="PrintButton_Click" />
+                    Command="{Binding PrintCommand}"
+                    CommandParameter="{Binding ElementName=InvoiceRoot}" />
             <Button Content="Đóng"
                     Width="80"
-                    Click="CloseButton_Click" />
+                    Command="{Binding CloseCommand}" />
         </StackPanel>
     </Grid>
 </Window>

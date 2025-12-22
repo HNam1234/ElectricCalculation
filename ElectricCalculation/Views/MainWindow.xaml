@@ -16,13 +16,50 @@
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Top toolbar -->
+        <!-- Menu -->
+        <Menu Grid.Row="0"
+              Margin="0,0,0,8">
+            <MenuItem Header="_Tệp">
+                <MenuItem Header="Mở dữ liệu..."
+                          Command="{Binding OpenDataFileWithDialogCommand}" />
+                <MenuItem Header="Lưu dữ liệu..."
+                          Command="{Binding SaveDataFileWithDialogCommand}" />
+                <Separator />
+                <MenuItem Header="Import từ Excel..."
+                          Command="{Binding ImportFromExcelWithDialogCommand}" />
+                <MenuItem Header="Export bảng kê ra Excel..."
+                          Command="{Binding ExportToExcelWithDialogCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_Kỳ">
+                <MenuItem Header="Làm tháng mới..."
+                          Command="{Binding NewPeriodWithDialogCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_Xuất / In">
+                <MenuItem Header="Xuất hóa đơn (1 khách / bảng kê nếu chưa chọn)..."
+                          Command="{Binding PrintInvoiceWithDialogCommand}" />
+                <MenuItem Header="Xuất nhiều hóa đơn (chọn / filter)..."
+                          Command="{Binding PrintMultipleInvoicesWithDialogCommand}"
+                          CommandParameter="{Binding SelectedItems, ElementName=CustomerGrid}" />
+                <MenuItem Header="Xuất hóa đơn theo số..."
+                          Command="{Binding PrintInvoicesByRangeWithDialogCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_Báo cáo">
+                <MenuItem Header="Thống kê theo nhóm..."
+                          Command="{Binding ShowReportCommand}" />
+            </MenuItem>
+        </Menu>
+
+        <!-- Top toolbar (keep table-centric actions here) -->
         <StackPanel Orientation="Horizontal"
-                    Grid.Row="0"
+                    Grid.Row="1"
                     Margin="0,0,0,8">
             <TextBlock Text="Kỳ tính:"
                        VerticalAlignment="Center"
@@ -35,32 +72,6 @@
                     Margin="16,0,0,0"
                     Padding="12,4"
                     Command="{Binding AddRowCommand}" />
-
-            <Button Content="Import từ Excel"
-                    Margin="16,0,0,0"
-                    Padding="12,4"
-                    Command="{Binding ImportFromExcelWithDialogCommand}" />
-
-            <Button Content="Export ra Excel"
-                    Margin="16,0,0,0"
-                    Padding="12,4"
-                    Command="{Binding ExportToExcelWithDialogCommand}" />
-
-            <Button Content="In"
-                    Margin="16,0,0,0"
-                    Padding="12,4"
-                    Command="{Binding PrintInvoiceWithDialogCommand}" />
-
-            <Button Content="In nhiều phiếu"
-                    Margin="8,0,0,0"
-                    Padding="12,4"
-                    Command="{Binding PrintMultipleInvoicesWithDialogCommand}"
-                    CommandParameter="{Binding SelectedItems, ElementName=CustomerGrid}" />
-
-            <Button Content="Thống kê"
-                    Margin="16,0,0,0"
-                    Padding="12,4"
-                    Command="{Binding ShowReportCommand}" />
 
             <TextBlock Text="Người lập đơn:"
                        VerticalAlignment="Center"
@@ -84,7 +95,7 @@
 
         <!-- Main grid -->
         <DataGrid x:Name="CustomerGrid"
-                  Grid.Row="1"
+                  Grid.Row="2"
                   ItemsSource="{Binding CustomersView}"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
@@ -145,6 +156,9 @@
                 <DataGridTextColumn Header="Bao cấp (kWh)"
                                     Binding="{Binding SubsidizedKwh, UpdateSourceTrigger=PropertyChanged, StringFormat=N0}"
                                     Width="*" />
+                <DataGridTextColumn Header="Bao cấp (%)"
+                                    Binding="{Binding SubsidizedPercent, UpdateSourceTrigger=PropertyChanged, StringFormat=N0}"
+                                    Width="*" />
                 <DataGridTextColumn Header="Đơn giá (VNĐ/kWh)"
                                     Binding="{Binding UnitPrice, UpdateSourceTrigger=PropertyChanged, StringFormat=N0}"
                                     Width="*" />
@@ -165,7 +179,7 @@
         </DataGrid>
 
         <!-- Totals + clear button -->
-        <Grid Grid.Row="2"
+        <Grid Grid.Row="3"
               Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />

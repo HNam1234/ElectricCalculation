@@ -9,12 +9,14 @@ using ElectricCalculation.Models;
 namespace ElectricCalculation.Services
 {
     // Simple importer for the summary template:
-    // Sheet "Data", data starts at row 5, key columns:
+    // Prefer sheet "Data" (fallback to a matching sheet), data starts at row 5, key columns:
     // A: No., B: Customer, C: Group, D: Address, E: Household phone, F: Representative,
     // G: Rep phone, H: Building, J: Meter, K: Category, L: Location, M: Substation, N: Page,
     // O: Current, P: Previous, Q: Multiplier, S: Subsidy, U: Unit price, W: Performed by.
     public static class ExcelImportService
     {
+        private sealed record SheetInfo(string Name, string Path);
+
         public static IList<Customer> ImportFromFile(string filePath, out string? warningMessage)
         {
             warningMessage = null;
@@ -39,9 +41,29 @@ namespace ElectricCalculation.Services
                 throw new InvalidOperationException("File Excel không hợp lệ: không tìm thấy danh sách sheet.");
             }
 
+            var preferredSheetNames = new[]
+            {
+                "Data",
+                "Bảng kê",
+                "Bang ke",
+                "Ban  in so",
+                "Ban in so"
+            };
+
             var dataSheetElement = sheetsElement
                 .Elements(mainNs + "sheet")
-                .FirstOrDefault(s => string.Equals((string?)s.Attribute("name"), "Data", StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(s =>
+                {
+                    var name = (string?)s.Attribute("name");
+                    return !string.IsNullOrWhiteSpace(name) &&
+                           preferredSheetNames.Any(preferred => string.Equals(name, preferred, StringComparison.OrdinalIgnoreCase));
+                }) ?? sheetsElement.Elements(mainNs + "sheet").FirstOrDefault();
+
+            var selectedSheetName = (string?)dataSheetElement?.Attribute("name") ?? "Data";
+            if (!string.Equals(selectedSheetName, "Data", StringComparison.OrdinalIgnoreCase))
+            {
+                warningMessage = $"Không tìm thấy sheet 'Data'. Đang import từ sheet '{selectedSheetName}'.";
+            }
 
             if (dataSheetElement == null)
             {
@@ -136,32 +158,42 @@ namespace ElectricCalculation.Services
                     }
 
                     var type = (string?)cell.Attribute("t");
-                    var valueElement = cell.Element(mainNs + "v");
-                    if (valueElement == null)
-                    {
-                        cells[columnLetters] = null;
-                        continue;
-                    }
+                    string? cellValue = null;
 
-                    var rawValue = valueElement.Value;
-                    string? cellValue;
-
-                    if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(type, "inlineStr", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index) &&
-                            index >= 0 &&
-                            index < sharedStrings.Count)
-                        {
-                            cellValue = sharedStrings[index];
-                        }
-                        else
-                        {
-                            cellValue = rawValue;
-                        }
+                        var textParts = cell
+                            .Descendants(mainNs + "is")
+                            .Descendants(mainNs + "t")
+                            .Select(t => (string?)t ?? string.Empty);
+
+                        cellValue = string.Concat(textParts);
                     }
                     else
                     {
-                        cellValue = rawValue;
+                        var valueElement = cell.Element(mainNs + "v");
+                        if (valueElement != null)
+                        {
+                            var rawValue = valueElement.Value;
+
+                            if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index) &&
+                                    index >= 0 &&
+                                    index < sharedStrings.Count)
+                                {
+                                    cellValue = sharedStrings[index];
+                                }
+                                else
+                                {
+                                    cellValue = rawValue;
+                                }
+                            }
+                            else
+                            {
+                                cellValue = rawValue;
+                            }
+                        }
                     }
 
                     cells[columnLetters] = cellValue;

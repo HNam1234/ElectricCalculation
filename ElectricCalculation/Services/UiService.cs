@@ -34,11 +34,41 @@ namespace ElectricCalculation.Services
             return result == true ? dialog.FileName : null;
         }
 
+        public string? ShowOpenDataFileDialog()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "Electric Calculation data (*.json)|*.json|All files (*.*)|*.*"
+            };
+
+            var owner = GetOwner();
+            var result = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+            return result == true ? dialog.FileName : null;
+        }
+
         public string? ShowSaveExcelFileDialog(string defaultFileName, string? title = null)
         {
             var dialog = new SaveFileDialog
             {
                 Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
+                FileName = defaultFileName
+            };
+
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                dialog.Title = title;
+            }
+
+            var owner = GetOwner();
+            var result = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+            return result == true ? dialog.FileName : null;
+        }
+
+        public string? ShowSaveDataFileDialog(string defaultFileName, string? title = null)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "Electric Calculation data (*.json)|*.json|All files (*.*)|*.*",
                 FileName = defaultFileName
             };
 
@@ -140,11 +170,11 @@ namespace ElectricCalculation.Services
             return path;
         }
 
-        public void ShowReportWindow(string periodLabel, IEnumerable<Customer> customers)
+        public void ShowReportWindow(string periodLabel, IEnumerable<Customer> customers, string? issuerName = null)
         {
             var list = customers?.ToList() ?? new List<Customer>();
 
-            var vm = new ReportViewModel(periodLabel, list, this);
+            var vm = new ReportViewModel(periodLabel, list, issuerName, this);
             var window = new ReportWindow
             {
                 Owner = GetOwner(),
@@ -152,6 +182,35 @@ namespace ElectricCalculation.Services
             };
 
             window.ShowDialog();
+        }
+
+        public NewPeriodViewModel? ShowNewPeriodDialog()
+        {
+            var vm = new NewPeriodViewModel();
+            var window = new NewPeriodWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            return window.ShowDialog() == true ? vm : null;
+        }
+
+        public PrintRangeViewModel? ShowPrintRangeDialog(int defaultFrom, int defaultTo)
+        {
+            var vm = new PrintRangeViewModel
+            {
+                FromNumber = defaultFrom,
+                ToNumber = defaultTo
+            };
+
+            var window = new PrintRangeWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            return window.ShowDialog() == true ? vm : null;
         }
 
         private static string GetSolutionRootDirectory()

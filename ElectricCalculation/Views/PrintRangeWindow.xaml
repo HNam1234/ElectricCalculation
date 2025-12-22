@@ -1,0 +1,33 @@
+<Window x:Class="ElectricCalculation.Views.PrintRangeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        Title="In theo số phiếu"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Từ số:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBox Grid.Row="0" Grid.Column="1" Width="120" Text="{Binding FromNumber, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Đến số:" VerticalAlignment="Center" Margin="0,8,8,0"/>
+        <TextBox Grid.Row="1" Grid.Column="1" Width="120" Margin="0,8,0,0"
+                 Text="{Binding ToNumber, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Width="90" Margin="0,0,8,0" Content="OK" IsDefault="True" Command="{Binding OkCommand}"/>
+            <Button Width="90" Content="Hủy" IsCancel="True" Command="{Binding CancelCommand}"/>
+        </StackPanel>
+    </Grid>
+</Window>

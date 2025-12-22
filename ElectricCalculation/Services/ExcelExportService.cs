@@ -12,7 +12,12 @@ namespace ElectricCalculation.Services
 {
     public static class ExcelExportService
     {
-        public static void ExportToFile(string templatePath, string outputPath, IEnumerable<Customer> readings, string? periodLabel = null)
+        public static void ExportToFile(
+            string templatePath,
+            string outputPath,
+            IEnumerable<Customer> readings,
+            string? periodLabel = null,
+            string? issuerName = null)
         {
             if (string.IsNullOrWhiteSpace(templatePath))
             {
@@ -134,6 +139,17 @@ namespace ElectricCalculation.Services
                 sheetName: "Ban  in so",
                 readings: readingList,
                 title: title);
+
+            TryExportSchoolSheets(
+                archive,
+                sheetsElement,
+                relationshipsRoot,
+                relIdAttributeName,
+                mainNs,
+                relPackageNs,
+                readingList,
+                periodLabel,
+                issuerName);
         }
 
         private static bool TryExportSummaryLikeSheet(
@@ -248,7 +264,7 @@ namespace ElectricCalculation.Services
                 rowElement.Add(CreateNumberCell(mainNs, "O", rowIndexCounter, vm.CurrentIndex));
                 rowElement.Add(CreateNumberCell(mainNs, "P", rowIndexCounter, vm.PreviousIndex));
                 rowElement.Add(CreateNumberCell(mainNs, "Q", rowIndexCounter, vm.Multiplier));
-                rowElement.Add(CreateNumberCell(mainNs, "S", rowIndexCounter, vm.SubsidizedKwh));
+                rowElement.Add(CreateNumberCell(mainNs, "S", rowIndexCounter, vm.EffectiveSubsidizedKwh));
                 rowElement.Add(CreateNumberCell(mainNs, "U", rowIndexCounter, vm.UnitPrice));
 
                 var rAddress = $"R{rowIndexCounter}";
@@ -410,6 +426,119 @@ namespace ElectricCalculation.Services
             return true;
         }
 
+        private static void TryExportSchoolSheets(
+            ZipArchive archive,
+            XElement sheetsElement,
+            XElement relationshipsRoot,
+            XName relIdAttributeName,
+            XNamespace mainNs,
+            XNamespace relPackageNs,
+            IReadOnlyList<Customer> readings,
+            string? periodLabel,
+            string? issuerName)
+        {
+            var schoolSheetNames = sheetsElement
+                .Elements(mainNs + "sheet")
+                .Select(s => (string?)s.Attribute("name"))
+                .Where(name => !string.IsNullOrWhiteSpace(name) && name.TrimStart().StartsWith("Trường", StringComparison.OrdinalIgnoreCase))
+                .Select(name => name!.Trim())
+                .ToList();
+
+            if (schoolSheetNames.Count == 0)
+            {
+                return;
+            }
+
+            var periodText = BuildSchoolPeriodText(periodLabel);
+            var dateText = BuildHanoiDateLine(DateTime.Today);
+
+            foreach (var sheetName in schoolSheetNames)
+            {
+                if (!TryLoadWorksheet(
+                        archive,
+                        sheetsElement,
+                        relationshipsRoot,
+                        relIdAttributeName,
+                        mainNs,
+                        relPackageNs,
+                        sheetName,
+                        out var sheetEntry,
+                        out var sheetDoc,
+                        out var sheetDataElement))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(periodText))
+                {
+                    UpdateTextCell(sheetDataElement, mainNs, "F2", periodText);
+                }
+
+                UpdateTextCell(sheetDataElement, mainNs, "A5", $"Kính gửi: {sheetName}");
+                UpdateTextCell(sheetDataElement, mainNs, "A7", $"Địa chỉ hộ tiêu thụ: {sheetName}.");
+                UpdateTextCell(sheetDataElement, mainNs, "A8", $"Đại diện: {sheetName}.");
+
+                var groupCustomers = readings
+                    .Where(c => string.Equals(NormalizeSheetKey(c.GroupName), NormalizeSheetKey(sheetName), StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(c => c.SequenceNumber > 0 ? c.SequenceNumber : int.MaxValue)
+                    .ThenBy(c => c.Name)
+                    .ToList();
+
+                const int startRowIndex = 13;
+                const int maxRowCount = 23;
+
+                var fallbackStt = 1;
+
+                for (var i = 0; i < maxRowCount; i++)
+                {
+                    var rowIndex = startRowIndex + i;
+
+                    if (i < groupCustomers.Count)
+                    {
+                        var customer = groupCustomers[i];
+                        var sttValue = customer.SequenceNumber > 0 ? customer.SequenceNumber : fallbackStt++;
+
+                        UpdateNumberCell(sheetDataElement, mainNs, $"A{rowIndex}", sttValue);
+                        UpdateNumberCell(sheetDataElement, mainNs, $"B{rowIndex}", customer.CurrentIndex);
+                        UpdateNumberCell(sheetDataElement, mainNs, $"C{rowIndex}", customer.PreviousIndex);
+                        UpdateNumberCell(sheetDataElement, mainNs, $"D{rowIndex}", customer.Multiplier);
+                        UpdateNumberCell(sheetDataElement, mainNs, $"F{rowIndex}", customer.EffectiveSubsidizedKwh);
+                        UpdateNumberCell(sheetDataElement, mainNs, $"G{rowIndex}", customer.UnitPrice);
+                        UpdateTextCell(sheetDataElement, mainNs, $"I{rowIndex}", customer.Name ?? string.Empty);
+                        UpdateTextCell(sheetDataElement, mainNs, $"J{rowIndex}", customer.MeterNumber ?? string.Empty);
+
+                        continue;
+                    }
+
+                    ClearCellValue(sheetDataElement, mainNs, $"A{rowIndex}");
+                    ClearCellValue(sheetDataElement, mainNs, $"B{rowIndex}");
+                    ClearCellValue(sheetDataElement, mainNs, $"C{rowIndex}");
+                    ClearCellValue(sheetDataElement, mainNs, $"D{rowIndex}");
+                    ClearCellValue(sheetDataElement, mainNs, $"F{rowIndex}");
+                    ClearCellValue(sheetDataElement, mainNs, $"G{rowIndex}");
+                    UpdateTextCell(sheetDataElement, mainNs, $"I{rowIndex}", string.Empty);
+                    UpdateTextCell(sheetDataElement, mainNs, $"J{rowIndex}", string.Empty);
+                }
+
+                var totalAmount = groupCustomers.Take(maxRowCount).Sum(c => c.Amount);
+                var amountText = VietnameseNumberTextService.ConvertAmountToText(totalAmount);
+                UpdateTextCell(sheetDataElement, mainNs, "A37", $"Bằng chữ: {amountText} ./.");
+
+                UpdateTextCell(sheetDataElement, mainNs, "H39", dateText);
+
+                if (!string.IsNullOrWhiteSpace(issuerName))
+                {
+                    UpdateTextCell(sheetDataElement, mainNs, "H44", issuerName.Trim());
+                }
+
+                using (var sheetStream = sheetEntry.Open())
+                {
+                    sheetStream.SetLength(0);
+                    sheetDoc.Save(sheetStream);
+                }
+            }
+        }
+
         private static bool TryLoadWorksheet(
             ZipArchive archive,
             XElement sheetsElement,
@@ -527,6 +656,94 @@ namespace ElectricCalculation.Services
             }
 
             return false;
+        }
+
+        private static string NormalizeSheetKey(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+        }
+
+        private static string? BuildSchoolPeriodText(string? periodLabel)
+        {
+            if (!TryParsePeriod(periodLabel, out var month, out var year))
+            {
+                return null;
+            }
+
+            return $"Tháng {month} năm {year}";
+        }
+
+        private static string BuildHanoiDateLine(DateTime date)
+        {
+            return $"Hà Nội, ngày {date.Day} tháng {date.Month} năm {date.Year}";
+        }
+
+        private static void ClearCellValue(XElement sheetDataElement, XNamespace ns, string cellReference)
+        {
+            UpdateNumberCell(sheetDataElement, ns, cellReference, value: null);
+        }
+
+        private static void UpdateNumberCell(XElement sheetDataElement, XNamespace ns, string cellReference, decimal? value)
+        {
+            if (string.IsNullOrEmpty(cellReference))
+            {
+                return;
+            }
+
+            var rowIndex = GetRowIndex(cellReference);
+            if (rowIndex <= 0)
+            {
+                return;
+            }
+
+            var row = sheetDataElement
+                .Elements(ns + "row")
+                .FirstOrDefault(r => string.Equals(
+                    (string?)r.Attribute("r"),
+                    rowIndex.ToString(CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal));
+
+            if (row == null)
+            {
+                return;
+            }
+
+            var cell = row
+                .Elements(ns + "c")
+                .FirstOrDefault(c => string.Equals(
+                    (string?)c.Attribute("r"),
+                    cellReference,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (cell == null)
+            {
+                cell = new XElement(ns + "c", new XAttribute("r", cellReference));
+                row.Add(cell);
+            }
+
+            var styleAttr = (string?)cell.Attribute("s");
+
+            cell.Attribute("t")?.Remove();
+            cell.Elements(ns + "f").Remove();
+            cell.Elements(ns + "v").Remove();
+            cell.Elements(ns + "is").Remove();
+
+            if (value == null)
+            {
+                if (!string.IsNullOrEmpty(styleAttr))
+                {
+                    cell.SetAttributeValue("s", styleAttr);
+                }
+
+                return;
+            }
+
+            cell.Add(new XElement(ns + "v", value.Value.ToString(CultureInfo.InvariantCulture)));
+
+            if (!string.IsNullOrEmpty(styleAttr))
+            {
+                cell.SetAttributeValue("s", styleAttr);
+            }
         }
 
         private static void UpdateTextCell(XElement sheetDataElement, XNamespace ns, string cellReference, string text)

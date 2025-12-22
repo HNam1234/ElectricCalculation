@@ -3,12 +3,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
         mc:Ignorable="d"
         Title="{Binding Title}"
         WindowStartupLocation="CenterOwner"
         SizeToContent="WidthAndHeight"
         ResizeMode="NoResize"
-        WindowStyle="ToolWindow">
+        WindowStyle="ToolWindow"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -27,7 +29,7 @@
             <Button Content="OK"
                     Width="80"
                     IsDefault="True"
-                    Click="Ok_Click" />
+                    Command="{Binding OkCommand}" />
         </StackPanel>
     </Grid>
 </Window>

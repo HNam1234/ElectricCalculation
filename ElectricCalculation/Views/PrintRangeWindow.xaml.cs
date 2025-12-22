@@ -2,12 +2,11 @@ using System.Windows;
 
 namespace ElectricCalculation.Views
 {
-    public partial class MessageDialogWindow : Window
+    public partial class PrintRangeWindow : Window
     {
-        public MessageDialogWindow()
+        public PrintRangeWindow()
         {
             InitializeComponent();
         }
     }
 }
-

@@ -50,26 +50,36 @@ namespace ElectricCalculation.Models
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Consumption))]
+        [NotifyPropertyChangedFor(nameof(EffectiveSubsidizedKwh))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
         [NotifyPropertyChangedFor(nameof(Amount))]
         private decimal previousIndex;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Consumption))]
+        [NotifyPropertyChangedFor(nameof(EffectiveSubsidizedKwh))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
         [NotifyPropertyChangedFor(nameof(Amount))]
         private decimal currentIndex;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Consumption))]
+        [NotifyPropertyChangedFor(nameof(EffectiveSubsidizedKwh))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
         [NotifyPropertyChangedFor(nameof(Amount))]
         private decimal multiplier = 1;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(EffectiveSubsidizedKwh))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
         [NotifyPropertyChangedFor(nameof(Amount))]
         private decimal subsidizedKwh;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(EffectiveSubsidizedKwh))]
+        [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
+        [NotifyPropertyChangedFor(nameof(Amount))]
+        private decimal subsidizedPercent;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Amount))]
@@ -89,7 +99,22 @@ namespace ElectricCalculation.Models
             }
         }
 
-        public decimal ChargeableKwh => Math.Max(0, Consumption - SubsidizedKwh);
+        public decimal EffectiveSubsidizedKwh
+        {
+            get
+            {
+                if (SubsidizedPercent > 0)
+                {
+                    var percent = SubsidizedPercent / 100m;
+                    var value = Consumption * percent;
+                    return decimal.Round(value, 0, MidpointRounding.AwayFromZero);
+                }
+
+                return SubsidizedKwh;
+            }
+        }
+
+        public decimal ChargeableKwh => Math.Max(0, Consumption - EffectiveSubsidizedKwh);
 
         public decimal Amount => ChargeableKwh * UnitPrice;
     }

@@ -30,10 +30,10 @@ namespace ElectricCalculation.ViewModels
         private decimal totalAmount;
 
         [ObservableProperty]
-        private double kwhBarHeight;
+        private double kwhBarRatio;
 
         [ObservableProperty]
-        private double amountBarHeight;
+        private double amountBarRatio;
 
         [ObservableProperty]
         private bool isSelected;
@@ -41,13 +41,12 @@ namespace ElectricCalculation.ViewModels
 
     public partial class ReportViewModel : ObservableObject
     {
-        private const double MaxBarHeight = 180.0;
-
         private readonly UiService _ui;
 
         private readonly decimal _maxKwh;
         private readonly decimal _maxAmount;
         private readonly string _periodLabel;
+        private readonly string _issuerName;
         private readonly List<Customer> _sourceCustomers;
 
         public string Title { get; }
@@ -73,6 +72,9 @@ namespace ElectricCalculation.ViewModels
 
         [ObservableProperty]
         private ReportItem? selectedItem;
+
+        [ObservableProperty]
+        private bool? dialogResult;
 
         public string KwhTick100 => FormatTick(MaxKwh);
         public string KwhTick75 => FormatTick(MaxKwh * 0.75m);
@@ -106,6 +108,12 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
+        [RelayCommand]
+        private void Close()
+        {
+            DialogResult = false;
+        }
+
         public ReportViewModel(string periodLabel, IEnumerable<Customer> customers)
             : this(periodLabel, customers, new UiService())
         {
@@ -115,10 +123,20 @@ namespace ElectricCalculation.ViewModels
             string periodLabel,
             IEnumerable<Customer> customers,
             UiService ui)
+            : this(periodLabel, customers, issuerName: null, ui)
+        {
+        }
+
+        public ReportViewModel(
+            string periodLabel,
+            IEnumerable<Customer> customers,
+            string? issuerName,
+            UiService ui)
         {
             _ui = ui ?? throw new ArgumentNullException(nameof(ui));
 
             _periodLabel = periodLabel ?? string.Empty;
+            _issuerName = issuerName?.Trim() ?? string.Empty;
             Title = $"Thống kê theo nhóm - {periodLabel}";
 
             _sourceCustomers = customers?.ToList() ?? new List<Customer>();
@@ -159,8 +177,8 @@ namespace ElectricCalculation.ViewModels
 
             foreach (var item in Items)
             {
-                item.KwhBarHeight = (double)(item.TotalConsumption / maxKwh) * MaxBarHeight;
-                item.AmountBarHeight = (double)(item.TotalAmount / maxAmount) * MaxBarHeight;
+                item.KwhBarRatio = maxKwh <= 0 ? 0 : (double)(item.TotalConsumption / maxKwh);
+                item.AmountBarRatio = maxAmount <= 0 ? 0 : (double)(item.TotalAmount / maxAmount);
             }
         }
 
@@ -170,39 +188,75 @@ namespace ElectricCalculation.ViewModels
             var item = SelectedItem;
             if (item == null)
             {
-                _ui.ShowMessage("In Excel nhóm", "Hãy chọn một nhóm / đơn vị ở bảng bên phải trước.");
+                _ui.ShowMessage("In hóa đơn nhóm", "Hãy chọn một nhóm / đơn vị ở bảng bên phải trước.");
                 return;
             }
 
             var customers = GetCustomersForGroup(item).ToList();
             if (customers.Count == 0)
             {
-                _ui.ShowMessage("In Excel nhóm", "Nhóm được chọn hiện không có dữ liệu khách hàng.");
-                return;
-            }
-
-            var safeGroupName = MakeSafeFileName(item.GroupName);
-            var outputPath = _ui.ShowSaveExcelFileDialog(
-                $"Tien dien - {safeGroupName}.xlsx",
-                title: "In Excel nhóm");
-
-            if (string.IsNullOrWhiteSpace(outputPath))
-            {
+                _ui.ShowMessage("In hóa đơn nhóm", "Nhóm được chọn hiện không có dữ liệu khách hàng.");
                 return;
             }
 
             try
             {
-                var templatePath = _ui.GetSummaryTemplatePath();
-                ExcelExportService.ExportToFile(templatePath, outputPath, customers, _periodLabel);
+                var previewLines = customers
+                    .OrderBy(c => c.SequenceNumber)
+                    .Take(25)
+                    .Select(c =>
+                    {
+                        var name = string.IsNullOrWhiteSpace(c.Name) ? "(Không tên)" : c.Name.Trim();
+                        var meter = string.IsNullOrWhiteSpace(c.MeterNumber) ? string.Empty : $" - {c.MeterNumber.Trim()}";
+                        return $"{c.SequenceNumber:0000} - {name}{meter}";
+                    })
+                    .ToList();
+
+                var previewText = string.Join("\n", previewLines);
+                if (customers.Count > previewLines.Count)
+                {
+                    previewText += $"\n... ({customers.Count - previewLines.Count} khách nữa)";
+                }
+
+                var groupName = string.IsNullOrWhiteSpace(item.GroupName) ? "(Không có nhóm)" : item.GroupName;
+                var confirm = _ui.Confirm(
+                    "In hóa đơn nhóm",
+                    $"Nhóm: {groupName}\nSố khách: {customers.Count}\n\nDanh sách:\n{previewText}\n\nXuất hóa đơn Excel theo nhóm?");
+
+                if (!confirm)
+                {
+                    return;
+                }
+
+                var safeGroupName = MakeSafeFileName(groupName);
+                var outputPath = _ui.ShowSaveExcelFileDialog(
+                    $"Hoa don - {safeGroupName}.xlsx",
+                    title: "In hóa đơn nhóm");
+
+                if (string.IsNullOrWhiteSpace(outputPath))
+                {
+                    return;
+                }
+
+                var templatePath = _ui.GetInvoiceTemplatePath();
+                var ordered = customers.OrderBy(c => c.SequenceNumber).ToList();
+
+                InvoiceExcelExportService.ExportInvoicesToWorkbook(
+                    templatePath,
+                    outputPath,
+                    ordered,
+                    _periodLabel,
+                    _issuerName);
+
+                _ui.ShowMessage("In hóa đơn nhóm", $"Đã tạo file Excel tại:\n{outputPath}");
             }
             catch (WarningException warning)
             {
-                _ui.ShowMessage("In Excel nhóm", warning.Message);
+                _ui.ShowMessage("In hóa đơn nhóm", warning.Message);
             }
             catch (Exception ex)
             {
-                _ui.ShowMessage("Lỗi in Excel nhóm", ex.Message);
+                _ui.ShowMessage("Lỗi in hóa đơn nhóm", ex.Message);
             }
         }
 
@@ -213,7 +267,7 @@ namespace ElectricCalculation.ViewModels
                 name = name.Replace(c, '_');
             }
 
-            return string.IsNullOrWhiteSpace(name) ? "Tien_dien" : name;
+            return string.IsNullOrWhiteSpace(name) ? "Hoa_don" : name;
         }
 
         public IEnumerable<Customer> GetCustomersForGroup(ReportItem? item)
