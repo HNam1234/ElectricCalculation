@@ -304,30 +304,6 @@
             </Button>
 
             <Button Style="{StaticResource ActionCardButtonStyle}"
-                    Command="{Binding OpenDataFileCommand}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Border Style="{StaticResource IconBadgeStyle}">
-                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE8E5;" />
-                    </Border>
-                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                        <TextBlock Text="Mở file dữ liệu (.json)"
-                                   Foreground="{StaticResource TextPrimary}"
-                                   FontSize="14"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Mở file dữ liệu đã lưu để chỉnh sửa."
-                                   Foreground="{StaticResource TextSecondary}"
-                                   FontSize="12"
-                                   Margin="0,4,0,0"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Grid>
-            </Button>
-
-            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding OpenSnapshotCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -338,11 +314,11 @@
                         <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE7C3;" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                        <TextBlock Text="Mở bộ dữ liệu..."
+                        <TextBlock Text="Mở Bộ dữ liệu(json)"
                                    Foreground="{StaticResource TextPrimary}"
                                    FontSize="14"
                                    FontWeight="SemiBold" />
-                        <TextBlock Text="Chọn một bộ dữ liệu bất kỳ để xem/sửa."
+                        <TextBlock Text="Chọn file bộ dữ liệu (.json) để xem/sửa."
                                    Foreground="{StaticResource TextSecondary}"
                                    FontSize="12"
                                    Margin="0,4,0,0"

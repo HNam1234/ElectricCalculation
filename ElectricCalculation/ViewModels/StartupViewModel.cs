@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -63,18 +64,6 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
-        private void OpenDataFile()
-        {
-            var filePath = _ui.ShowOpenDataFileDialog();
-            if (string.IsNullOrWhiteSpace(filePath))
-            {
-                return;
-            }
-
-            OpenEditorWindow(editor => editor.LoadDataFile(filePath, setCurrentDataFilePath: true));
-        }
-
-        [RelayCommand]
         private void ImportExcel()
         {
             var filePath = _ui.ShowOpenExcelFileDialog();
@@ -95,7 +84,33 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
-            OpenEditorWindow(editor => editor.LoadSnapshotFile(filePath));
+            OpenEditorWindow(editor =>
+            {
+                if (IsSnapshotPath(filePath))
+                {
+                    editor.LoadSnapshotFile(filePath);
+                    return;
+                }
+
+                editor.LoadDataFile(filePath, setCurrentDataFilePath: true);
+            });
+        }
+
+        private static bool IsSnapshotPath(string filePath)
+        {
+            try
+            {
+                var root = Path.GetFullPath(SaveGameService.GetSaveRootDirectory())
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    + Path.DirectorySeparatorChar;
+
+                var fullPath = Path.GetFullPath(filePath);
+                return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         [RelayCommand]
