@@ -17,6 +17,8 @@ namespace ElectricCalculation.ViewModels
     public partial class MainWindowViewModel : ObservableObject
     {
         private readonly UiService _ui;
+        private AppSettings _settings;
+        private bool _suppressDirty;
 
         [ObservableProperty]
         private string? currentDataFilePath;
@@ -37,6 +39,12 @@ namespace ElectricCalculation.ViewModels
         [ObservableProperty]
         private string invoiceIssuer = string.Empty;
 
+        [ObservableProperty]
+        private bool isDirty;
+
+        [ObservableProperty]
+        private string? loadedSnapshotPath;
+
         public ObservableCollection<Customer> Customers { get; } = new();
 
         public ICollectionView CustomersView { get; }
@@ -53,7 +61,9 @@ namespace ElectricCalculation.ViewModels
 
         public MainWindowViewModel()
         {
+            _suppressDirty = true;
             _ui = new UiService();
+            _settings = AppSettingsService.Load();
 
             CustomersView = CollectionViewSource.GetDefaultView(Customers);
             CustomersView.Filter = FilterCustomer;
@@ -65,6 +75,69 @@ namespace ElectricCalculation.ViewModels
             }
 
             PeriodLabel = $"Tháng {DateTime.Now.Month:00}/{DateTime.Now.Year}";
+            IsDirty = false;
+            _suppressDirty = false;
+        }
+
+        public void ImportFromExcelFile(string filePath)
+        {
+            try
+            {
+                _suppressDirty = true;
+                ImportFromExcel(filePath);
+                IsDirty = true;
+                LoadedSnapshotPath = null;
+            }
+            finally
+            {
+                _suppressDirty = false;
+            }
+        }
+
+        public void LoadDataFile(string filePath, bool setCurrentDataFilePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new WarningException("Đường dẫn file dữ liệu trống.");
+            }
+
+            if (!File.Exists(filePath))
+            {
+                throw new WarningException("Không tìm thấy file dữ liệu.");
+            }
+
+            var (period, customers) = ProjectFileService.Load(filePath);
+
+            try
+            {
+                _suppressDirty = true;
+
+                Customers.Clear();
+                foreach (var c in customers)
+                {
+                    Customers.Add(c);
+                }
+
+                if (!string.IsNullOrWhiteSpace(period))
+                {
+                    PeriodLabel = period;
+                }
+
+                SelectedCustomer = null;
+                CurrentDataFilePath = setCurrentDataFilePath ? filePath : null;
+                LoadedSnapshotPath = null;
+                IsDirty = false;
+            }
+            finally
+            {
+                _suppressDirty = false;
+            }
+        }
+
+        public void LoadSnapshotFile(string filePath)
+        {
+            LoadDataFile(filePath, setCurrentDataFilePath: false);
+            LoadedSnapshotPath = filePath;
         }
 
         [RelayCommand]
@@ -80,6 +153,7 @@ namespace ElectricCalculation.ViewModels
                 customer.PerformedBy = InvoiceIssuer;
             }
 
+            ApplyDefaultsIfNeeded(customer, applyWhen: _settings.ApplyDefaultsOnNewRow);
             Customers.Add(customer);
         }
 
@@ -122,17 +196,96 @@ namespace ElectricCalculation.ViewModels
             var imported = Services.ExcelImportService.ImportFromFile(filePath, out var warningMessage);
             foreach (var item in imported)
             {
+                ApplyDefaultsIfNeeded(item, applyWhen: _settings.ApplyDefaultsOnImport);
                 Customers.Add(item);
             }
 
             if (!string.IsNullOrWhiteSpace(warningMessage))
             {
-                throw new WarningException(warningMessage);
+                Debug.WriteLine(warningMessage);
             }
 
             if (Customers.Count == 0)
             {
                 throw new WarningException("Import xong nhưng không có dòng dữ liệu nào. Hãy kiểm tra lại sheet 'Data' trong file Excel nguồn.");
+            }
+
+            if (!_suppressDirty)
+            {
+                IsDirty = true;
+            }
+        }
+
+        [RelayCommand]
+        private void OpenSettingsWithDialog()
+        {
+            try
+            {
+                var updated = _ui.ShowSettingsDialog(_settings ?? new AppSettings());
+                if (updated == null)
+                {
+                    return;
+                }
+
+                AppSettingsService.Save(updated);
+                _settings = updated;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Loi", ex.Message);
+            }
+        }
+
+        private void ApplyDefaultsIfNeeded(Customer customer, bool applyWhen)
+        {
+            if (!applyWhen || customer == null)
+            {
+                return;
+            }
+
+            var s = _settings ?? new AppSettings();
+            var overwrite = s.OverrideExistingValues;
+
+            if (overwrite || customer.UnitPrice <= 0)
+            {
+                if (s.DefaultUnitPrice > 0)
+                {
+                    customer.UnitPrice = s.DefaultUnitPrice;
+                }
+            }
+
+            if (overwrite || customer.Multiplier <= 0)
+            {
+                customer.Multiplier = s.DefaultMultiplier > 0 ? s.DefaultMultiplier : 1m;
+            }
+
+            if (overwrite || (customer.SubsidizedKwh <= 0 && customer.SubsidizedPercent <= 0))
+            {
+                if (s.DefaultSubsidizedPercent > 0)
+                {
+                    customer.SubsidizedPercent = s.DefaultSubsidizedPercent;
+                    if (overwrite)
+                    {
+                        customer.SubsidizedKwh = 0;
+                    }
+                }
+                else if (s.DefaultSubsidizedKwh > 0)
+                {
+                    customer.SubsidizedKwh = s.DefaultSubsidizedKwh;
+                    if (overwrite)
+                    {
+                        customer.SubsidizedPercent = 0;
+                    }
+                }
+            }
+
+            if (overwrite || string.IsNullOrWhiteSpace(customer.PerformedBy))
+            {
+                if (!string.IsNullOrWhiteSpace(s.DefaultPerformedBy))
+                {
+                    customer.PerformedBy = s.DefaultPerformedBy;
+                }
             }
         }
 
@@ -224,20 +377,7 @@ namespace ElectricCalculation.ViewModels
 
             try
             {
-                var (period, customers) = ProjectFileService.Load(filePath);
-
-                Customers.Clear();
-                foreach (var c in customers)
-                {
-                    Customers.Add(c);
-                }
-
-                if (!string.IsNullOrWhiteSpace(period))
-                {
-                    PeriodLabel = period;
-                }
-
-                CurrentDataFilePath = filePath;
+                LoadDataFile(filePath, setCurrentDataFilePath: true);
             }
             catch (Exception ex)
             {
@@ -264,12 +404,105 @@ namespace ElectricCalculation.ViewModels
             {
                 ProjectFileService.Save(outputPath, PeriodLabel, Customers);
                 CurrentDataFilePath = outputPath;
+                SaveGameService.SaveSnapshot(PeriodLabel, Customers);
+                IsDirty = false;
                 _ui.ShowMessage("Lưu dữ liệu", $"Đã lưu dữ liệu tại:\n{outputPath}");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(ex);
                 _ui.ShowMessage("Lỗi lưu dữ liệu", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void SaveSnapshot()
+        {
+            try
+            {
+                if (Customers.Count == 0)
+                {
+                    throw new WarningException("Không có dữ liệu để lưu snapshot.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(LoadedSnapshotPath))
+                {
+                    var (result, action, snapshotName) = _ui.ShowSaveSnapshotPrompt(
+                        PeriodLabel,
+                        Customers.Count,
+                        defaultSnapshotName: "Chỉnh sửa",
+                        canOverwrite: true);
+
+                    if (result == null || action == SaveSnapshotPromptAction.DontSave)
+                    {
+                        return;
+                    }
+
+                    if (action == SaveSnapshotPromptAction.Overwrite)
+                    {
+                        ProjectFileService.Save(LoadedSnapshotPath, PeriodLabel, Customers);
+                        IsDirty = false;
+                        _ui.ShowMessage("Snapshot", $"Đã ghi đè snapshot:\n{LoadedSnapshotPath}");
+                        return;
+                    }
+
+                    var newSnapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers, snapshotName);
+                    IsDirty = false;
+                    _ui.ShowMessage("Snapshot", $"Đã tạo snapshot tại:\n{newSnapshotPath}");
+                    return;
+                }
+
+                var snapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers);
+                IsDirty = false;
+                _ui.ShowMessage("Snapshot", $"Đã tạo snapshot tại:\n{snapshotPath}");
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("Snapshot", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi snapshot", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void OpenSnapshotWithDialog()
+        {
+            var filePath = _ui.ShowOpenSnapshotFileDialog();
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            try
+            {
+                LoadSnapshotFile(filePath);
+
+                // Tránh ghi đè snapshot khi bấm "Lưu dữ liệu..."
+                _ui.ShowMessage("Snapshot", $"Đã mở snapshot:\n{filePath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi mở snapshot", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private void OpenSnapshotFolder()
+        {
+            try
+            {
+                var folder = _ui.GetSnapshotFolderPath();
+                _ui.OpenWithDefaultApp(folder);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi", ex.Message);
             }
         }
 
@@ -550,6 +783,11 @@ namespace ElectricCalculation.ViewModels
 
         private void Customers_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
+            if (!_suppressDirty)
+            {
+                IsDirty = true;
+            }
+
             if (e.OldItems != null)
             {
                 foreach (var item in e.OldItems.OfType<Customer>())
@@ -574,6 +812,11 @@ namespace ElectricCalculation.ViewModels
 
         private void Customer_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            if (!_suppressDirty)
+            {
+                IsDirty = true;
+            }
+
             if (e.PropertyName == nameof(Customer.Consumption) ||
                 e.PropertyName == nameof(Customer.ChargeableKwh) ||
                 e.PropertyName == nameof(Customer.Amount))
@@ -627,6 +870,22 @@ namespace ElectricCalculation.ViewModels
             OnPropertyChanged(nameof(TotalConsumption));
             OnPropertyChanged(nameof(TotalChargeableKwh));
             OnPropertyChanged(nameof(TotalAmount));
+        }
+
+        partial void OnPeriodLabelChanged(string value)
+        {
+            if (!_suppressDirty)
+            {
+                IsDirty = true;
+            }
+        }
+
+        partial void OnInvoiceIssuerChanged(string value)
+        {
+            if (!_suppressDirty)
+            {
+                IsDirty = true;
+            }
         }
 
         private static string MakeSafeFileName(string name)

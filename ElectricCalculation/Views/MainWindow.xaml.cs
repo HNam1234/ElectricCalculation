@@ -1,59 +1,96 @@
+using System;
+using System.Diagnostics;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
+using ElectricCalculation.Services;
+using ElectricCalculation.ViewModels;
 
 namespace ElectricCalculation.Views
 {
     public partial class MainWindow : Window
     {
+        private bool _skipClosePrompt;
+
         public MainWindow()
         {
             InitializeComponent();
         }
 
-        private void DataGrid_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        private void BackToHome_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not DependencyObject dependencyObject)
+            if (!PromptSnapshotIfNeeded())
             {
                 return;
             }
 
-            var scrollViewer = FindVisualChild<ScrollViewer>(dependencyObject);
-            if (scrollViewer == null)
-            {
-                return;
-            }
-
-            var offset = scrollViewer.VerticalOffset - e.Delta / 3.0;
-            if (offset < 0)
-            {
-                offset = 0;
-            }
-
-            scrollViewer.ScrollToVerticalOffset(offset);
-            e.Handled = true;
+            _skipClosePrompt = true;
+            var home = new StartupWindow();
+            Application.Current.MainWindow = home;
+            home.Show();
+            Close();
         }
 
-        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
-            var childrenCount = VisualTreeHelper.GetChildrenCount(parent);
-            for (var i = 0; i < childrenCount; i++)
+            if (_skipClosePrompt)
             {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is T match)
-                {
-                    return match;
-                }
-
-                var descendant = FindVisualChild<T>(child);
-                if (descendant != null)
-                {
-                    return descendant;
-                }
+                return;
             }
 
-            return null;
+            if (!PromptSnapshotIfNeeded())
+            {
+                e.Cancel = true;
+            }
+        }
+
+        private bool PromptSnapshotIfNeeded()
+        {
+            try
+            {
+                if (DataContext is not MainWindowViewModel vm)
+                {
+                    return true;
+                }
+
+                if (vm.Customers.Count == 0 || !vm.IsDirty)
+                {
+                    return true;
+                }
+
+                var ui = new UiService();
+                var canOverwrite = !string.IsNullOrWhiteSpace(vm.LoadedSnapshotPath);
+                var (result, action, snapshotName) = ui.ShowSaveSnapshotPrompt(
+                    vm.PeriodLabel,
+                    vm.Customers.Count,
+                    defaultSnapshotName: "Chỉnh sửa",
+                    canOverwrite: canOverwrite);
+
+                if (result == null)
+                {
+                    return false; // cancel
+                }
+
+                if (action == SaveSnapshotPromptAction.DontSave)
+                {
+                    return true;
+                }
+
+                if (action == SaveSnapshotPromptAction.Overwrite && !string.IsNullOrWhiteSpace(vm.LoadedSnapshotPath))
+                {
+                    ProjectFileService.Save(vm.LoadedSnapshotPath, vm.PeriodLabel, vm.Customers);
+                    vm.IsDirty = false;
+                    return true;
+                }
+
+                SaveGameService.SaveSnapshot(vm.PeriodLabel, vm.Customers, snapshotName);
+                vm.IsDirty = false;
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                return true;
+            }
         }
     }
 }

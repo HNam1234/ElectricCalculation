@@ -46,6 +46,29 @@ namespace ElectricCalculation.Services
             return result == true ? dialog.FileName : null;
         }
 
+        public string? ShowOpenSnapshotFileDialog()
+        {
+            var saveRoot = SaveGameService.GetSaveRootDirectory();
+            Directory.CreateDirectory(saveRoot);
+
+            var dialog = new OpenFileDialog
+            {
+                Filter = "Electric Calculation snapshot (*.json)|*.json|All files (*.*)|*.*",
+                InitialDirectory = saveRoot
+            };
+
+            var owner = GetOwner();
+            var result = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+            return result == true ? dialog.FileName : null;
+        }
+
+        public string GetSnapshotFolderPath()
+        {
+            var saveRoot = SaveGameService.GetSaveRootDirectory();
+            Directory.CreateDirectory(saveRoot);
+            return saveRoot;
+        }
+
         public string? ShowSaveExcelFileDialog(string defaultFileName, string? title = null)
         {
             var dialog = new SaveFileDialog
@@ -121,6 +144,35 @@ namespace ElectricCalculation.Services
             };
 
             dialog.ShowDialog();
+        }
+
+        public (bool? Result, SaveSnapshotPromptAction Action, string SnapshotName) ShowSaveSnapshotPrompt(
+            string periodLabel,
+            int customerCount,
+            string? defaultSnapshotName = null,
+            bool canOverwrite = false)
+        {
+            var vm = new SaveSnapshotPromptViewModel(periodLabel ?? string.Empty, customerCount, defaultSnapshotName, canOverwrite);
+            var dialog = new SaveSnapshotPromptWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            var result = dialog.ShowDialog();
+            return (result, vm.Action, vm.SnapshotName ?? string.Empty);
+        }
+
+        public AppSettings? ShowSettingsDialog(AppSettings settings)
+        {
+            var vm = new SettingsViewModel(settings ?? new AppSettings());
+            var dialog = new SettingsWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            return dialog.ShowDialog() == true ? vm.BuildSettings() : null;
         }
 
         public void OpenWithDefaultApp(string path)

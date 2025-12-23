@@ -1,0 +1,221 @@
+<Window x:Class="ElectricCalculation.Views.StartupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:ElectricCalculation.ViewModels"
+        mc:Ignorable="d"
+        Title="Electric Calculation"
+        Height="720"
+        Width="1100"
+        WindowStartupLocation="CenterScreen">
+    <Window.DataContext>
+        <vm:StartupViewModel />
+    </Window.DataContext>
+
+    <Window.Resources>
+        <Style x:Key="TileButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="#F7F7F7" />
+            <Setter Property="BorderBrush" Value="#DDDDDD" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ContentPresenter Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#EFEFEF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#E8E8E8" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconTextStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="28" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Foreground" Value="#333333" />
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*" />
+            <ColumnDefinition Width="3*" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,14">
+            <TextBlock Text="Electric Calculation"
+                       FontSize="28"
+                       FontWeight="SemiBold" />
+            <TextBlock Text="Chọn bộ dữ liệu để tiếp tục hoặc tạo mới."
+                       Opacity="0.75" />
+        </StackPanel>
+
+        <!-- Left: Actions -->
+        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,14,0">
+            <Button Style="{StaticResource TileButtonStyle}"
+                    Command="{Binding ContinueLatestSnapshotCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE768;" Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Tiếp tục (snapshot mới nhất)" FontWeight="SemiBold" />
+                        <TextBlock Text="Mở nhanh bản lưu gần nhất để chỉnh sửa." Opacity="0.75" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Style="{StaticResource TileButtonStyle}"
+                    Command="{Binding NewSessionCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE710;" Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Dữ liệu mới" FontWeight="SemiBold" />
+                        <TextBlock Text="Tạo bộ dữ liệu trống để nhập tay." Opacity="0.75" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Style="{StaticResource TileButtonStyle}"
+                    Command="{Binding ImportExcelCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE8A5;" Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Nhập từ Excel" FontWeight="SemiBold" />
+                        <TextBlock Text="Chọn file Excel để import dữ liệu." Opacity="0.75" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Style="{StaticResource TileButtonStyle}"
+                    Command="{Binding OpenDataFileCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE8E5;" Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Mở file dữ liệu (.json)" FontWeight="SemiBold" />
+                        <TextBlock Text="Mở file đã lưu để chỉnh sửa." Opacity="0.75" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Style="{StaticResource TileButtonStyle}"
+                    Command="{Binding OpenSnapshotCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE7C3;" Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Mở snapshot..." FontWeight="SemiBold" />
+                        <TextBlock Text="Chọn một snapshot bất kỳ để xem/sửa." Opacity="0.75" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Style="{StaticResource TileButtonStyle}"
+                    Command="{Binding OpenSnapshotFolderCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE838;" Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Mở thư mục snapshot" FontWeight="SemiBold" />
+                        <TextBlock Text="Mở thư mục lưu snapshot trong Documents." Opacity="0.75" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </StackPanel>
+
+        <!-- Right: Recent snapshots -->
+        <Border Grid.Row="1" Grid.Column="1" BorderBrush="#DDDDDD" BorderThickness="1" CornerRadius="10" Padding="14">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                    <TextBlock Text="Snapshots gần đây" FontWeight="SemiBold" FontSize="16" DockPanel.Dock="Left" />
+                     <Button Content="Refresh"
+                             DockPanel.Dock="Right"
+                             Padding="6,1"
+                             Height="22"
+                             FontSize="12"
+                             VerticalAlignment="Center"
+                             HorizontalAlignment="Right"
+                             Command="{Binding RefreshSnapshotsCommand}" />
+                 </DockPanel>
+
+                <ListBox Grid.Row="1"
+                         ItemsSource="{Binding RecentSnapshots}"
+                         SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}"
+                         MouseDoubleClick="RecentSnapshots_MouseDoubleClick"
+                         PreviewMouseRightButtonDown="RecentSnapshots_PreviewMouseRightButtonDown">
+                    <ListBox.ContextMenu>
+                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <MenuItem Header="Mở" Command="{Binding OpenSelectedSnapshotCommand}" />
+                            <MenuItem Header="Xóa" Command="{Binding DeleteSelectedSnapshotCommand}" />
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                    <ListBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding OpenSelectedSnapshotCommand}" />
+                        <KeyBinding Key="Delete" Command="{Binding DeleteSelectedSnapshotCommand}" />
+                    </ListBox.InputBindings>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="#EEEEEE" BorderThickness="0,0,0,1" Padding="8">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding DisplaySubtitle}" Opacity="0.75" />
+                                    <TextBlock Text="{Binding Path}" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

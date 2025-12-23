@@ -8,7 +8,8 @@
         Title="Electric Calculation"
         Height="720"
         Width="1280"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Closing="MainWindow_Closing">
     <Window.DataContext>
         <vm:MainWindowViewModel />
     </Window.DataContext>
@@ -27,8 +28,18 @@
             <MenuItem Header="_Tệp">
                 <MenuItem Header="Mở dữ liệu..."
                           Command="{Binding OpenDataFileWithDialogCommand}" />
+                <MenuItem Header="Trang chủ"
+                          Click="BackToHome_Click" />
                 <MenuItem Header="Lưu dữ liệu..."
                           Command="{Binding SaveDataFileWithDialogCommand}" />
+                <MenuItem Header="Cau hinh..."
+                          Command="{Binding OpenSettingsWithDialogCommand}" />
+                <MenuItem Header="Snapshot: Lưu nhanh"
+                          Command="{Binding SaveSnapshotCommand}" />
+                <MenuItem Header="Snapshot: Mở..."
+                          Command="{Binding OpenSnapshotWithDialogCommand}" />
+                <MenuItem Header="Snapshot: Mở thư mục"
+                          Command="{Binding OpenSnapshotFolderCommand}" />
                 <Separator />
                 <MenuItem Header="Import từ Excel..."
                           Command="{Binding ImportFromExcelWithDialogCommand}" />
@@ -61,6 +72,10 @@
         <StackPanel Orientation="Horizontal"
                     Grid.Row="1"
                     Margin="0,0,0,8">
+            <Button Content="← Trang chủ"
+                    Padding="12,4"
+                    Margin="0,0,16,0"
+                    Click="BackToHome_Click" />
             <TextBlock Text="Kỳ tính:"
                        VerticalAlignment="Center"
                        Margin="0,0,8,0" />
@@ -100,10 +115,19 @@
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
                   IsReadOnly="False"
+                  EnableRowVirtualization="True"
+                  EnableColumnVirtualization="True"
+                  VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.VirtualizationMode="Recycling"
+                  ScrollViewer.CanContentScroll="True"
+                  ScrollViewer.IsDeferredScrollingEnabled="False"
                   SelectionMode="Extended"
-                  SelectedItem="{Binding SelectedCustomer, Mode=TwoWay}"
-                  PreviewMouseWheel="DataGrid_PreviewMouseWheel">
+                  SelectedItem="{Binding SelectedCustomer, Mode=TwoWay}">
             <DataGrid.Columns>
+                <DataGridTextColumn Header="Số phiếu"
+                                    Binding="{Binding SequenceNumber, UpdateSourceTrigger=PropertyChanged}"
+                                    IsReadOnly="True"
+                                    Width="70" />
                 <DataGridTextColumn Header="Tên khách"
                                     Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                                     Width="2*" />

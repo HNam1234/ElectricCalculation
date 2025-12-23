@@ -9,7 +9,7 @@ using ElectricCalculation.Models;
 namespace ElectricCalculation.Services
 {
     // Simple importer for the summary template:
-    // Prefer sheet "Data" (fallback to a matching sheet), data starts at row 5, key columns:
+    // Prefer sheet "Data" (fallback to a matching sheet), key columns:
     // A: No., B: Customer, C: Group, D: Address, E: Household phone, F: Representative,
     // G: Rep phone, H: Building, J: Meter, K: Category, L: Location, M: Substation, N: Page,
     // O: Current, P: Previous, Q: Multiplier, S: Subsidy, U: Unit price, W: Performed by.
@@ -45,6 +45,7 @@ namespace ElectricCalculation.Services
             {
                 "Data",
                 "Bảng kê",
+                "Bảng kê",
                 "Bang ke",
                 "Ban  in so",
                 "Ban in so"
@@ -52,15 +53,20 @@ namespace ElectricCalculation.Services
 
             var dataSheetElement = sheetsElement
                 .Elements(mainNs + "sheet")
-                .FirstOrDefault(s =>
-                {
-                    var name = (string?)s.Attribute("name");
-                    return !string.IsNullOrWhiteSpace(name) &&
-                           preferredSheetNames.Any(preferred => string.Equals(name, preferred, StringComparison.OrdinalIgnoreCase));
-                }) ?? sheetsElement.Elements(mainNs + "sheet").FirstOrDefault();
+                .FirstOrDefault(s => string.Equals((string?)s.Attribute("name"), "Data", StringComparison.OrdinalIgnoreCase))
+                ?? sheetsElement
+                    .Elements(mainNs + "sheet")
+                    .FirstOrDefault(s =>
+                    {
+                        var name = (string?)s.Attribute("name");
+                        return !string.IsNullOrWhiteSpace(name) &&
+                               preferredSheetNames.Any(preferred => string.Equals(name, preferred, StringComparison.OrdinalIgnoreCase));
+                    })
+                ?? sheetsElement.Elements(mainNs + "sheet").FirstOrDefault();
 
             var selectedSheetName = (string?)dataSheetElement?.Attribute("name") ?? "Data";
-            if (!string.Equals(selectedSheetName, "Data", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(selectedSheetName, "Data", StringComparison.OrdinalIgnoreCase) &&
+                !preferredSheetNames.Any(preferred => string.Equals(selectedSheetName, preferred, StringComparison.OrdinalIgnoreCase)))
             {
                 warningMessage = $"Không tìm thấy sheet 'Data'. Đang import từ sheet '{selectedSheetName}'.";
             }
@@ -128,15 +134,11 @@ namespace ElectricCalculation.Services
                 throw new InvalidOperationException("Sheet 'Data' không chứa dữ liệu (sheetData).");
             }
 
+            int? dataStartRowIndex = null;
+
             foreach (var row in sheetDataElement.Elements(mainNs + "row"))
             {
                 if (!int.TryParse((string?)row.Attribute("r"), out var rowIndex))
-                {
-                    continue;
-                }
-
-                // Skip header; data starts at row 5.
-                if (rowIndex < 5)
                 {
                     continue;
                 }
@@ -199,8 +201,28 @@ namespace ElectricCalculation.Services
                     cells[columnLetters] = cellValue;
                 }
 
-                // Skip rows without sequence number.
                 var sequenceNumber = GetInt(cells, "A");
+
+                // Detect the first data row dynamically (avoid hardcoding a template row index).
+                // The first row with a positive "STT" is considered the start of data.
+                if (dataStartRowIndex == null)
+                {
+                    if (sequenceNumber > 0)
+                    {
+                        dataStartRowIndex = rowIndex;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+
+                if (rowIndex < dataStartRowIndex.Value)
+                {
+                    continue;
+                }
+
+                // Skip rows without sequence number.
                 if (sequenceNumber <= 0)
                 {
                     continue;
