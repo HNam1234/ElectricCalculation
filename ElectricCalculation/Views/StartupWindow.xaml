@@ -8,18 +8,36 @@
         Title="Electric Calculation"
         Height="720"
         Width="1100"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Background="#F7F7F7"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
     <Window.DataContext>
         <vm:StartupViewModel />
     </Window.DataContext>
 
     <Window.Resources>
-        <Style x:Key="TileButtonStyle" TargetType="{x:Type Button}">
-            <Setter Property="Background" Value="#F7F7F7" />
-            <Setter Property="BorderBrush" Value="#DDDDDD" />
+        <SolidColorBrush x:Key="CardBg" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="CardBorder" Color="#FFE5E7EB" />
+        <SolidColorBrush x:Key="TextPrimary" Color="#FF111827" />
+        <SolidColorBrush x:Key="TextSecondary" Color="#FF4B5563" />
+        <SolidColorBrush x:Key="TextMuted" Color="#FF6B7280" />
+        <SolidColorBrush x:Key="HoverBg" Color="#FFF3F4F6" />
+        <SolidColorBrush x:Key="PressedBg" Color="#FFE5E7EB" />
+        <SolidColorBrush x:Key="Accent" Color="#FF2563EB" />
+
+        <DropShadowEffect x:Key="CardShadow"
+                          BlurRadius="18"
+                          ShadowDepth="2"
+                          Opacity="0.18"
+                          Color="#000000" />
+
+        <Style x:Key="ActionCardButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="{StaticResource CardBg}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="14" />
-            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Margin" Value="0,0,0,12" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -27,18 +45,20 @@
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10">
+                                CornerRadius="14"
+                                SnapsToDevicePixels="True"
+                                Effect="{StaticResource CardShadow}">
                             <ContentPresenter Margin="{TemplateBinding Padding}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#EFEFEF" />
+                                <Setter Property="Background" Value="{StaticResource HoverBg}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#E8E8E8" />
+                                <Setter Property="Background" Value="{StaticResource PressedBg}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.6" />
+                                <Setter Property="Opacity" Value="0.55" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -46,16 +66,120 @@
             </Setter>
         </Style>
 
-        <Style x:Key="IconTextStyle" TargetType="{x:Type TextBlock}">
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
-            <Setter Property="FontSize" Value="28" />
-            <Setter Property="VerticalAlignment" Value="Top" />
-            <Setter Property="Foreground" Value="#333333" />
+        <Style x:Key="IconBadgeStyle" TargetType="{x:Type Border}">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="46" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Background" Value="#FFEFF6FF" />
+            <Setter Property="BorderBrush" Value="#FFD6E4FF" />
+            <Setter Property="BorderThickness" Value="1" />
         </Style>
 
+        <Style x:Key="IconGlyphStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="SectionCardStyle" TargetType="{x:Type Border}">
+            <Setter Property="Background" Value="{StaticResource CardBg}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Effect" Value="{StaticResource CardShadow}" />
+        </Style>
+
+        <Style x:Key="SmallTextButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="#FFFFFFFF" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource HoverBg}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{StaticResource PressedBg}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type ListBox}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        </Style>
+
+        <Style TargetType="{x:Type ListBoxItem}">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                        <Border x:Name="ItemBorder"
+                                Background="{StaticResource CardBg}"
+                                BorderBrush="{StaticResource CardBorder}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="12">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource HoverBg}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#FFEEF2FF" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type ContextMenu}">
+            <Setter Property="Background" Value="{StaticResource CardBg}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6" />
+        </Style>
+        <Style TargetType="{x:Type MenuItem}">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Padding" Value="10,6" />
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="16">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -65,156 +189,270 @@
             <ColumnDefinition Width="3*" />
         </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,14">
-            <TextBlock Text="Electric Calculation"
-                       FontSize="28"
-                       FontWeight="SemiBold" />
-            <TextBlock Text="Chọn bộ dữ liệu để tiếp tục hoặc tạo mới."
-                       Opacity="0.75" />
-        </StackPanel>
+        <!-- Header -->
+        <Grid Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Width="54"
+                    Height="54"
+                    CornerRadius="18"
+                    Background="#FFFFFFFF"
+                    BorderBrush="{StaticResource CardBorder}"
+                    BorderThickness="1"
+                    Margin="0,0,14,0">
+                <TextBlock FontFamily="Segoe MDL2 Assets"
+                           FontSize="26"
+                           Foreground="{StaticResource Accent}"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Text="&#xE945;" />
+            </Border>
+
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="Electric Calculation"
+                           Foreground="{StaticResource TextPrimary}"
+                           FontSize="28"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="Chọn nguồn dữ liệu để bắt đầu hoặc tiếp tục chỉnh sửa."
+                           Foreground="{StaticResource TextSecondary}"
+                           FontSize="13"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+        </Grid>
 
         <!-- Left: Actions -->
-        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,14,0">
-            <Button Style="{StaticResource TileButtonStyle}"
+        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
+            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding ContinueLatestSnapshotCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE768;" Margin="0,0,12,0" />
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Tiếp tục (snapshot mới nhất)" FontWeight="SemiBold" />
-                        <TextBlock Text="Mở nhanh bản lưu gần nhất để chỉnh sửa." Opacity="0.75" TextWrapping="Wrap" />
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE768;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Tiếp tục (bộ dữ liệu mới nhất)"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Mở nhanh bản lưu gần nhất để chỉnh sửa."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Button>
 
-            <Button Style="{StaticResource TileButtonStyle}"
+            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding NewSessionCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE710;" Margin="0,0,12,0" />
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Dữ liệu mới" FontWeight="SemiBold" />
-                        <TextBlock Text="Tạo bộ dữ liệu trống để nhập tay." Opacity="0.75" TextWrapping="Wrap" />
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE710;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Dữ liệu mới"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Tạo bộ dữ liệu trống để nhập tay."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Button>
 
-            <Button Style="{StaticResource TileButtonStyle}"
+            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding ImportExcelCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE8A5;" Margin="0,0,12,0" />
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Nhập từ Excel" FontWeight="SemiBold" />
-                        <TextBlock Text="Chọn file Excel để import dữ liệu." Opacity="0.75" TextWrapping="Wrap" />
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE8A5;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Nhập từ Excel"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Chọn file Excel để nhập dữ liệu."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Button>
 
-            <Button Style="{StaticResource TileButtonStyle}"
+            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding OpenDataFileCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE8E5;" Margin="0,0,12,0" />
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Mở file dữ liệu (.json)" FontWeight="SemiBold" />
-                        <TextBlock Text="Mở file đã lưu để chỉnh sửa." Opacity="0.75" TextWrapping="Wrap" />
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE8E5;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Mở file dữ liệu (.json)"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Mở file dữ liệu đã lưu để chỉnh sửa."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Button>
 
-            <Button Style="{StaticResource TileButtonStyle}"
+            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding OpenSnapshotCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE7C3;" Margin="0,0,12,0" />
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Mở snapshot..." FontWeight="SemiBold" />
-                        <TextBlock Text="Chọn một snapshot bất kỳ để xem/sửa." Opacity="0.75" TextWrapping="Wrap" />
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE7C3;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Mở bộ dữ liệu..."
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Chọn một bộ dữ liệu bất kỳ để xem/sửa."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Button>
 
-            <Button Style="{StaticResource TileButtonStyle}"
+            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding OpenSnapshotFolderCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource IconTextStyle}" Text="&#xE838;" Margin="0,0,12,0" />
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Mở thư mục snapshot" FontWeight="SemiBold" />
-                        <TextBlock Text="Mở thư mục lưu snapshot trong Documents." Opacity="0.75" TextWrapping="Wrap" />
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE838;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Mở thư mục bộ dữ liệu"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Mở thư mục lưu bộ dữ liệu trong Documents."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Button>
         </StackPanel>
 
-        <!-- Right: Recent snapshots -->
-        <Border Grid.Row="1" Grid.Column="1" BorderBrush="#DDDDDD" BorderThickness="1" CornerRadius="10" Padding="14">
+        <!-- Right: Recent datasets -->
+        <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource SectionCardStyle}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <DockPanel Grid.Row="0" Margin="0,0,0,10">
-                    <TextBlock Text="Snapshots gần đây" FontWeight="SemiBold" FontSize="16" DockPanel.Dock="Left" />
-                     <Button Content="Refresh"
-                             DockPanel.Dock="Right"
-                             Padding="6,1"
-                             Height="22"
-                             FontSize="12"
-                             VerticalAlignment="Center"
-                             HorizontalAlignment="Right"
-                             Command="{Binding RefreshSnapshotsCommand}" />
-                 </DockPanel>
+                <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="Bộ dữ liệu gần đây"
+                               Foreground="{StaticResource TextPrimary}"
+                               FontSize="16"
+                               FontWeight="SemiBold" />
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource SmallTextButtonStyle}"
+                            Content="Làm mới"
+                            Command="{Binding RefreshSnapshotsCommand}" />
+                </DockPanel>
 
-                <ListBox Grid.Row="1"
-                         ItemsSource="{Binding RecentSnapshots}"
-                         SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}"
-                         MouseDoubleClick="RecentSnapshots_MouseDoubleClick"
-                         PreviewMouseRightButtonDown="RecentSnapshots_PreviewMouseRightButtonDown">
-                    <ListBox.ContextMenu>
-                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                            <MenuItem Header="Mở" Command="{Binding OpenSelectedSnapshotCommand}" />
-                            <MenuItem Header="Xóa" Command="{Binding DeleteSelectedSnapshotCommand}" />
-                        </ContextMenu>
-                    </ListBox.ContextMenu>
-                    <ListBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding OpenSelectedSnapshotCommand}" />
-                        <KeyBinding Key="Delete" Command="{Binding DeleteSelectedSnapshotCommand}" />
-                    </ListBox.InputBindings>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Border BorderBrush="#EEEEEE" BorderThickness="0,0,0,1" Padding="8">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" />
-                                    <TextBlock Text="{Binding DisplaySubtitle}" Opacity="0.75" />
-                                    <TextBlock Text="{Binding Path}" Opacity="0.55" TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <Grid Grid.Row="1">
+                    <ListBox x:Name="RecentSnapshotsList"
+                             ItemsSource="{Binding RecentSnapshots}"
+                             SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}"
+                             MouseDoubleClick="RecentSnapshots_MouseDoubleClick"
+                             PreviewMouseRightButtonDown="RecentSnapshots_PreviewMouseRightButtonDown">
+                        <ListBox.ContextMenu>
+                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="Mở" Command="{Binding OpenSelectedSnapshotCommand}" />
+                                <MenuItem Header="Xóa" Command="{Binding DeleteSelectedSnapshotCommand}" />
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
+                        <ListBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding OpenSelectedSnapshotCommand}" />
+                            <KeyBinding Key="Delete" Command="{Binding DeleteSelectedSnapshotCommand}" />
+                        </ListBox.InputBindings>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{Binding DisplayTitle}"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Grid.Row="1"
+                                               Text="{Binding DisplaySubtitle}"
+                                               Foreground="{StaticResource TextSecondary}"
+                                               FontSize="12"
+                                               Margin="0,4,0,0" />
+                                    <TextBlock Grid.Row="2"
+                                               Text="{Binding Path}"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="11"
+                                               Margin="0,6,0,0"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
 
+                    <TextBlock IsHitTestVisible="False"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Text="Chưa có bộ dữ liệu nào. Hãy nhập Excel hoặc tạo dữ liệu mới."
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="{x:Type TextBlock}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ElementName=RecentSnapshotsList, Path=HasItems}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
             </Grid>
         </Border>
     </Grid>

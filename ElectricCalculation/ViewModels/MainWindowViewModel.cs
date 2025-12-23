@@ -203,6 +203,10 @@ namespace ElectricCalculation.ViewModels
             if (!string.IsNullOrWhiteSpace(warningMessage))
             {
                 Debug.WriteLine(warningMessage);
+                if (!warningMessage.Contains("Khong thay dong tieu de", StringComparison.OrdinalIgnoreCase))
+                {
+                    _ui.ShowMessage("Thong bao import Excel", warningMessage);
+                }
             }
 
             if (Customers.Count == 0)
@@ -442,24 +446,24 @@ namespace ElectricCalculation.ViewModels
                     {
                         ProjectFileService.Save(LoadedSnapshotPath, PeriodLabel, Customers);
                         IsDirty = false;
-                        _ui.ShowMessage("Snapshot", $"Đã ghi đè snapshot:\n{LoadedSnapshotPath}");
+                        _ui.ShowMessage("Bộ dữ liệu", $"Đã ghi đè bộ dữ liệu:\n{LoadedSnapshotPath}");
                         return;
                     }
 
                     var newSnapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers, snapshotName);
                     IsDirty = false;
-                    _ui.ShowMessage("Snapshot", $"Đã tạo snapshot tại:\n{newSnapshotPath}");
+                    _ui.ShowMessage("Bộ dữ liệu", $"Đã tạo bộ dữ liệu tại:\n{newSnapshotPath}");
                     return;
                 }
 
                 var snapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers);
                 IsDirty = false;
-                _ui.ShowMessage("Snapshot", $"Đã tạo snapshot tại:\n{snapshotPath}");
+                _ui.ShowMessage("Bộ dữ liệu", $"Đã tạo bộ dữ liệu tại:\n{snapshotPath}");
             }
             catch (WarningException warning)
             {
                 Debug.WriteLine(warning);
-                _ui.ShowMessage("Snapshot", warning.Message);
+                _ui.ShowMessage("Bộ dữ liệu", warning.Message);
             }
             catch (Exception ex)
             {
@@ -482,7 +486,7 @@ namespace ElectricCalculation.ViewModels
                 LoadSnapshotFile(filePath);
 
                 // Tránh ghi đè snapshot khi bấm "Lưu dữ liệu..."
-                _ui.ShowMessage("Snapshot", $"Đã mở snapshot:\n{filePath}");
+                _ui.ShowMessage("Bộ dữ liệu", $"Đã mở bộ dữ liệu:\n{filePath}");
             }
             catch (Exception ex)
             {

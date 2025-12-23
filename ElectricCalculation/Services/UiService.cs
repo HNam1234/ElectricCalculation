@@ -53,7 +53,7 @@ namespace ElectricCalculation.Services
 
             var dialog = new OpenFileDialog
             {
-                Filter = "Electric Calculation snapshot (*.json)|*.json|All files (*.*)|*.*",
+                Filter = "Electric Calculation bộ dữ liệu (*.json)|*.json|All files (*.*)|*.*",
                 InitialDirectory = saveRoot
             };
 
@@ -153,7 +153,7 @@ namespace ElectricCalculation.Services
             bool canOverwrite = false)
         {
             var vm = new SaveSnapshotPromptViewModel(periodLabel ?? string.Empty, customerCount, defaultSnapshotName, canOverwrite);
-            var dialog = new SaveSnapshotPromptWindow
+            var dialog = new SaveSnapshotWindow
             {
                 Owner = GetOwner(),
                 DataContext = vm

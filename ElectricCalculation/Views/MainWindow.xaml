@@ -34,11 +34,11 @@
                           Command="{Binding SaveDataFileWithDialogCommand}" />
                 <MenuItem Header="Cau hinh..."
                           Command="{Binding OpenSettingsWithDialogCommand}" />
-                <MenuItem Header="Snapshot: Lưu nhanh"
+                <MenuItem Header="Bộ dữ liệu: Lưu nhanh"
                           Command="{Binding SaveSnapshotCommand}" />
-                <MenuItem Header="Snapshot: Mở..."
+                <MenuItem Header="Bộ dữ liệu: Mở..."
                           Command="{Binding OpenSnapshotWithDialogCommand}" />
-                <MenuItem Header="Snapshot: Mở thư mục"
+                <MenuItem Header="Bộ dữ liệu: Mở thư mục"
                           Command="{Binding OpenSnapshotFolderCommand}" />
                 <Separator />
                 <MenuItem Header="Import từ Excel..."

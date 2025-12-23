@@ -159,8 +159,8 @@ namespace ElectricCalculation.ViewModels
 
                 var snapshot = SelectedSnapshot;
                 var ok = _ui.Confirm(
-                    "Xoa snapshot",
-                    $"Ban co chac muon xoa snapshot nay khong?\n\n{snapshot.DisplayTitle}\n{snapshot.Path}");
+                    "Xóa bộ dữ liệu",
+                    $"Bạn có chắc muốn xóa bộ dữ liệu này không?\n\n{snapshot.DisplayTitle}\n{snapshot.Path}");
 
                 if (!ok)
                 {
@@ -169,7 +169,7 @@ namespace ElectricCalculation.ViewModels
 
                 if (!SaveGameService.TryDeleteSnapshot(snapshot.Path, out var error))
                 {
-                    throw new WarningException(error ?? "Khong the xoa snapshot.");
+                    throw new WarningException(error ?? "Không thể xóa bộ dữ liệu.");
                 }
 
                 RecentSnapshots.Remove(snapshot);

@@ -2,9 +2,9 @@ using System.Windows;
 
 namespace ElectricCalculation.Views
 {
-    public partial class SaveSnapshotPromptWindow : Window
+    public partial class SaveSnapshotWindow : Window
     {
-        public SaveSnapshotPromptWindow()
+        public SaveSnapshotWindow()
         {
             InitializeComponent();
         }
@@ -15,4 +15,3 @@ namespace ElectricCalculation.Views
         }
     }
 }
-
