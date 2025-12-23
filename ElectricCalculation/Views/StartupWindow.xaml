@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:ElectricCalculation.ViewModels"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
         mc:Ignorable="d"
         Title="Electric Calculation"
         Height="720"
@@ -202,7 +203,12 @@
                     Background="#FFFFFFFF"
                     BorderBrush="{StaticResource CardBorder}"
                     BorderThickness="1"
-                    Margin="0,0,14,0">
+                    Margin="0,0,14,0"
+                    Cursor="Hand"
+                    ToolTip="Click me :)">
+                <Border.InputBindings>
+                    <MouseBinding MouseAction="LeftClick" Command="{Binding OpenLogoUrlCommand}" />
+                </Border.InputBindings>
                 <TextBlock FontFamily="Segoe MDL2 Assets"
                            FontSize="26"
                            Foreground="{StaticResource Accent}"
@@ -391,21 +397,21 @@
                 </DockPanel>
 
                 <Grid Grid.Row="1">
-                    <ListBox x:Name="RecentSnapshotsList"
-                             ItemsSource="{Binding RecentSnapshots}"
-                             SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}"
-                             MouseDoubleClick="RecentSnapshots_MouseDoubleClick"
-                             PreviewMouseRightButtonDown="RecentSnapshots_PreviewMouseRightButtonDown">
+                     <ListBox x:Name="RecentSnapshotsList"
+                              ItemsSource="{Binding RecentSnapshots}"
+                              SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}"
+                              behaviors:ListBoxRightClickSelectBehavior.IsEnabled="True"
+                              behaviors:ListBoxDoubleClickCommandBehavior.Command="{Binding OpenSelectedSnapshotCommand}">
                         <ListBox.ContextMenu>
                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                                 <MenuItem Header="Mở" Command="{Binding OpenSelectedSnapshotCommand}" />
                                 <MenuItem Header="Xóa" Command="{Binding DeleteSelectedSnapshotCommand}" />
                             </ContextMenu>
-                        </ListBox.ContextMenu>
-                        <ListBox.InputBindings>
-                            <KeyBinding Key="Enter" Command="{Binding OpenSelectedSnapshotCommand}" />
-                            <KeyBinding Key="Delete" Command="{Binding DeleteSelectedSnapshotCommand}" />
-                        </ListBox.InputBindings>
+                         </ListBox.ContextMenu>
+                         <ListBox.InputBindings>
+                             <KeyBinding Key="Enter" Command="{Binding OpenSelectedSnapshotCommand}" />
+                             <KeyBinding Key="Delete" Command="{Binding DeleteSelectedSnapshotCommand}" />
+                         </ListBox.InputBindings>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid>

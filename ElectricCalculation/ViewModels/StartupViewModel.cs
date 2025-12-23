@@ -2,25 +2,15 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ElectricCalculation.Services;
+using ElectricCalculation.Views;
 
 namespace ElectricCalculation.ViewModels
 {
-    public enum StartupRequestType
-    {
-        NewSession,
-        ImportExcel,
-        OpenDataFile,
-        OpenSnapshot,
-        OpenLatestSnapshot,
-        OpenSnapshotFolder,
-        OpenSnapshotPath
-    }
-
-    public sealed record StartupRequest(StartupRequestType Type, string? Path = null);
-
     public sealed record SnapshotItem(string Path, string PeriodLabel, string? SnapshotName, DateTime SavedAt)
     {
         public string DisplayTitle
@@ -42,8 +32,6 @@ namespace ElectricCalculation.ViewModels
 
         [ObservableProperty]
         private SnapshotItem? selectedSnapshot;
-
-        public event Action<StartupRequest>? Request;
 
         public StartupViewModel()
         {
@@ -71,7 +59,7 @@ namespace ElectricCalculation.ViewModels
         [RelayCommand]
         private void NewSession()
         {
-            Request?.Invoke(new StartupRequest(StartupRequestType.NewSession));
+            OpenEditorWindow(init: null);
         }
 
         [RelayCommand]
@@ -83,7 +71,7 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
-            Request?.Invoke(new StartupRequest(StartupRequestType.OpenDataFile, filePath));
+            OpenEditorWindow(editor => editor.LoadDataFile(filePath, setCurrentDataFilePath: true));
         }
 
         [RelayCommand]
@@ -95,7 +83,7 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
-            Request?.Invoke(new StartupRequest(StartupRequestType.ImportExcel, filePath));
+            OpenEditorWindow(editor => editor.ImportFromExcelFile(filePath));
         }
 
         [RelayCommand]
@@ -107,7 +95,7 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
-            Request?.Invoke(new StartupRequest(StartupRequestType.OpenSnapshot, filePath));
+            OpenEditorWindow(editor => editor.LoadSnapshotFile(filePath));
         }
 
         [RelayCommand]
@@ -121,7 +109,7 @@ namespace ElectricCalculation.ViewModels
                     throw new WarningException("Chưa có snapshot nào để tiếp tục.");
                 }
 
-                Request?.Invoke(new StartupRequest(StartupRequestType.OpenLatestSnapshot, latest));
+                OpenEditorWindow(editor => editor.LoadSnapshotFile(latest));
             }
             catch (Exception ex)
             {
@@ -139,7 +127,7 @@ namespace ElectricCalculation.ViewModels
                     throw new WarningException("Chọn 1 snapshot trong danh sách trước.");
                 }
 
-                Request?.Invoke(new StartupRequest(StartupRequestType.OpenSnapshotPath, SelectedSnapshot.Path));
+                OpenEditorWindow(editor => editor.LoadSnapshotFile(SelectedSnapshot.Path));
             }
             catch (Exception ex)
             {
@@ -187,7 +175,48 @@ namespace ElectricCalculation.ViewModels
         [RelayCommand]
         private void OpenSnapshotFolder()
         {
-            Request?.Invoke(new StartupRequest(StartupRequestType.OpenSnapshotFolder));
+            try
+            {
+                var folder = _ui.GetSnapshotFolderPath();
+                _ui.OpenWithDefaultApp(folder);
+            }
+            catch (Exception ex)
+            {
+                HandleRequestError(ex);
+            }
+        }
+
+        [RelayCommand]
+        private void OpenLogoUrl()
+        {
+            try
+            {
+                _ui.OpenWithDefaultApp("https://www.youtube.com/watch?v=xvFZjo5PgG0");
+            }
+            catch
+            {
+                // Ignore: opening a browser may fail in locked-down environments.
+            }
+        }
+
+        private void OpenEditorWindow(Action<MainWindowViewModel>? init)
+        {
+            var editorWindow = new MainWindow();
+            if (editorWindow.DataContext is not MainWindowViewModel editorVm)
+            {
+                throw new InvalidOperationException("MainWindow DataContext is not MainWindowViewModel.");
+            }
+
+            init?.Invoke(editorVm);
+
+            Application.Current.MainWindow = editorWindow;
+            editorWindow.Show();
+
+            var hostWindow = Application.Current?.Windows
+                .OfType<Window>()
+                .FirstOrDefault(w => ReferenceEquals(w.DataContext, this));
+
+            hostWindow?.Close();
         }
 
         public void HandleRequestError(Exception ex)
