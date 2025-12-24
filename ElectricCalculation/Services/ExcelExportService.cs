@@ -264,7 +264,7 @@ namespace ElectricCalculation.Services
                 rowElement.Add(CreateNumberCell(mainNs, "O", rowIndexCounter, vm.CurrentIndex));
                 rowElement.Add(CreateNumberCell(mainNs, "P", rowIndexCounter, vm.PreviousIndex));
                 rowElement.Add(CreateNumberCell(mainNs, "Q", rowIndexCounter, vm.Multiplier));
-                rowElement.Add(CreateNumberCell(mainNs, "S", rowIndexCounter, vm.EffectiveSubsidizedKwh));
+                rowElement.Add(CreateNumberCell(mainNs, "S", rowIndexCounter, vm.SubsidizedKwh));
                 rowElement.Add(CreateNumberCell(mainNs, "U", rowIndexCounter, vm.UnitPrice));
 
                 var rAddress = $"R{rowIndexCounter}";
@@ -502,7 +502,7 @@ namespace ElectricCalculation.Services
                         UpdateNumberCell(sheetDataElement, mainNs, $"B{rowIndex}", customer.CurrentIndex);
                         UpdateNumberCell(sheetDataElement, mainNs, $"C{rowIndex}", customer.PreviousIndex);
                         UpdateNumberCell(sheetDataElement, mainNs, $"D{rowIndex}", customer.Multiplier);
-                        UpdateNumberCell(sheetDataElement, mainNs, $"F{rowIndex}", customer.EffectiveSubsidizedKwh);
+                        UpdateNumberCell(sheetDataElement, mainNs, $"F{rowIndex}", customer.SubsidizedKwh);
                         UpdateNumberCell(sheetDataElement, mainNs, $"G{rowIndex}", customer.UnitPrice);
                         UpdateTextCell(sheetDataElement, mainNs, $"I{rowIndex}", customer.Name ?? string.Empty);
                         UpdateTextCell(sheetDataElement, mainNs, $"J{rowIndex}", customer.MeterNumber ?? string.Empty);

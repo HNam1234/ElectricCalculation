@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System;
 using System.Collections.Generic;
@@ -237,7 +237,7 @@ namespace ElectricCalculation.Services
             UpdateNumberCell(sheetDataElement, mainNs, "B13", customer.CurrentIndex);
             UpdateNumberCell(sheetDataElement, mainNs, "C13", customer.PreviousIndex);
             UpdateNumberCell(sheetDataElement, mainNs, "D13", multiplier);
-            UpdateNumberCell(sheetDataElement, mainNs, "F13", customer.EffectiveSubsidizedKwh);
+            UpdateNumberCell(sheetDataElement, mainNs, "F13", customer.SubsidizedKwh);
             UpdateNumberCell(sheetDataElement, mainNs, "G13", customer.UnitPrice);
 
             // E13: consumption (kWh).
@@ -624,7 +624,7 @@ namespace ElectricCalculation.Services
             UpdateNumberCell(sheetDataElement, mainNs, "B13", customer.CurrentIndex);
             UpdateNumberCell(sheetDataElement, mainNs, "C13", customer.PreviousIndex);
             UpdateNumberCell(sheetDataElement, mainNs, "D13", multiplier);
-            UpdateNumberCell(sheetDataElement, mainNs, "F13", customer.EffectiveSubsidizedKwh);
+            UpdateNumberCell(sheetDataElement, mainNs, "F13", customer.SubsidizedKwh);
             UpdateNumberCell(sheetDataElement, mainNs, "G13", customer.UnitPrice);
 
             UpdateNumberCell(sheetDataElement, mainNs, "E13", consumption);

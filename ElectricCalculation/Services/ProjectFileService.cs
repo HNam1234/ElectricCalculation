@@ -47,7 +47,6 @@ namespace ElectricCalculation.Services
                     CurrentIndex = c.CurrentIndex,
                     Multiplier = c.Multiplier,
                     SubsidizedKwh = c.SubsidizedKwh,
-                    SubsidizedPercent = c.SubsidizedPercent,
                     UnitPrice = c.UnitPrice
                 }).ToList()
             };
@@ -93,7 +92,6 @@ namespace ElectricCalculation.Services
                     CurrentIndex = c.CurrentIndex,
                     Multiplier = c.Multiplier <= 0 ? 1 : c.Multiplier,
                     SubsidizedKwh = c.SubsidizedKwh,
-                    SubsidizedPercent = c.SubsidizedPercent,
                     UnitPrice = c.UnitPrice
                 })
                 .OrderBy(c => c.SequenceNumber)

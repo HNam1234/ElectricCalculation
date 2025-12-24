@@ -9,17 +9,16 @@
         WindowStyle="ToolWindow"
         behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
     <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+         <Grid.RowDefinitions>
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
@@ -44,30 +43,26 @@
         <TextBox Grid.Row="3" Grid.Column="1" Width="220" Margin="0,0,0,6"
                  Text="{Binding DefaultSubsidizedKwh, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-        <TextBlock Grid.Row="4" Grid.Column="0" Text="Bao cap (%):" VerticalAlignment="Center" Margin="0,0,10,6"/>
-        <TextBox Grid.Row="4" Grid.Column="1" Width="220" Margin="0,0,0,6"
-                 Text="{Binding DefaultSubsidizedPercent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+         <TextBlock Grid.Row="4" Grid.Column="0" Text="Nguoi TH mac dinh:" VerticalAlignment="Center" Margin="0,0,10,12"/>
+         <TextBox Grid.Row="4" Grid.Column="1" Width="360" Margin="0,0,0,12"
+                  Text="{Binding DefaultPerformedBy, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-        <TextBlock Grid.Row="5" Grid.Column="0" Text="Nguoi TH mac dinh:" VerticalAlignment="Center" Margin="0,0,10,12"/>
-        <TextBox Grid.Row="5" Grid.Column="1" Width="360" Margin="0,0,0,12"
-                 Text="{Binding DefaultPerformedBy, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+         <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,0,0,10">
+             <CheckBox Content="Ap dung khi them dong moi" IsChecked="{Binding ApplyDefaultsOnNewRow, Mode=TwoWay}" />
+             <CheckBox Content="Ap dung sau khi import Excel" Margin="0,6,0,0" IsChecked="{Binding ApplyDefaultsOnImport, Mode=TwoWay}" />
+             <CheckBox Content="Ghi de gia tri da co" Margin="0,6,0,0" IsChecked="{Binding OverrideExistingValues, Mode=TwoWay}" />
+         </StackPanel>
 
-        <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Margin="0,0,0,10">
-            <CheckBox Content="Ap dung khi them dong moi" IsChecked="{Binding ApplyDefaultsOnNewRow, Mode=TwoWay}" />
-            <CheckBox Content="Ap dung sau khi import Excel" Margin="0,6,0,0" IsChecked="{Binding ApplyDefaultsOnImport, Mode=TwoWay}" />
-            <CheckBox Content="Ghi de gia tri da co" Margin="0,6,0,0" IsChecked="{Binding OverrideExistingValues, Mode=TwoWay}" />
-        </StackPanel>
+         <TextBlock Grid.Row="6" Grid.ColumnSpan="2"
+                    Foreground="#C00000"
+                    Text="{Binding ErrorMessage}"
+                    Margin="0,0,0,10"
+                    TextWrapping="Wrap"
+                    MaxWidth="520" />
 
-        <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
-                   Foreground="#C00000"
-                   Text="{Binding ErrorMessage}"
-                   Margin="0,0,0,10"
-                   TextWrapping="Wrap"
-                   MaxWidth="520" />
-
-        <StackPanel Grid.Row="8" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Width="90" Margin="0,0,8,0" Content="Luu" IsDefault="True" Command="{Binding OkCommand}" />
-            <Button Width="90" Content="Huy" IsCancel="True" Command="{Binding CancelCommand}" />
-        </StackPanel>
+         <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+             <Button Width="90" Margin="0,0,8,0" Content="Luu" IsDefault="True" Command="{Binding OkCommand}" />
+             <Button Width="90" Content="Huy" IsCancel="True" Command="{Binding CancelCommand}" />
+         </StackPanel>
     </Grid>
 </Window>

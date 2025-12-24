@@ -15,6 +15,8 @@ namespace ElectricCalculation.Services
     public sealed class UiService
     {
         private const string InvoiceTemplateFileName = "DefaultTemplate.xlsx";
+        private const string PackagedInvoiceTemplateRelativePath = @"Templates\DefaultTemplate.xlsx";
+        private const string PackagedSummaryTemplateRelativePath = @"SampleData\Bang_tong_hop_thu_thang_06_2025.xlsx";
         private const string LegacySummaryTemplateFileName = "Bảng tổng hợp thu tháng 6 năm 2025.xlsx";
 
         private static Window? GetOwner()
@@ -74,6 +76,24 @@ namespace ElectricCalculation.Services
             var dialog = new SaveFileDialog
             {
                 Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
+                FileName = defaultFileName
+            };
+
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                dialog.Title = title;
+            }
+
+            var owner = GetOwner();
+            var result = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+            return result == true ? dialog.FileName : null;
+        }
+
+        public string? ShowSavePdfFileDialog(string defaultFileName, string? title = null)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
                 FileName = defaultFileName
             };
 
@@ -187,6 +207,12 @@ namespace ElectricCalculation.Services
 
         public string GetSummaryTemplatePath()
         {
+            var packaged = Path.Combine(AppContext.BaseDirectory, PackagedSummaryTemplateRelativePath);
+            if (File.Exists(packaged))
+            {
+                return packaged;
+            }
+
             var rootDir = GetSolutionRootDirectory();
 
             var legacyPath = Path.Combine(rootDir, LegacySummaryTemplateFileName);
@@ -211,6 +237,12 @@ namespace ElectricCalculation.Services
 
         public string GetInvoiceTemplatePath()
         {
+            var packaged = Path.Combine(AppContext.BaseDirectory, PackagedInvoiceTemplateRelativePath);
+            if (File.Exists(packaged))
+            {
+                return packaged;
+            }
+
             var rootDir = GetSolutionRootDirectory();
             var path = Path.Combine(rootDir, InvoiceTemplateFileName);
 

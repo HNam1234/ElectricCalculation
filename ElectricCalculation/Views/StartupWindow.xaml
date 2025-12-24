@@ -98,8 +98,8 @@
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
             <Setter Property="BorderBrush" Value="{StaticResource CardBorder}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="10,4" />
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="FontSize" Value="10" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -107,7 +107,7 @@
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10">
+                                CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               Margin="{TemplateBinding Padding}" />
@@ -380,6 +380,9 @@
                               behaviors:ListBoxDoubleClickCommandBehavior.Command="{Binding OpenSelectedSnapshotCommand}">
                         <ListBox.ContextMenu>
                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="{Binding SelectedSnapshot.PinMenuText}"
+                                          Command="{Binding TogglePinSelectedSnapshotCommand}"
+                                          IsEnabled="{Binding SelectedSnapshot.CanTogglePin}" />
                                 <MenuItem Header="Mở" Command="{Binding OpenSelectedSnapshotCommand}" />
                                 <MenuItem Header="Xóa" Command="{Binding DeleteSelectedSnapshotCommand}" />
                             </ContextMenu>
@@ -396,10 +399,50 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock Text="{Binding DisplayTitle}"
-                                               Foreground="{StaticResource TextPrimary}"
-                                               FontSize="13"
-                                               FontWeight="SemiBold" />
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding DisplayTitle}"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold" />
+
+                                        <Border Grid.Column="1"
+                                                Background="{StaticResource Accent}"
+                                                CornerRadius="10"
+                                                Padding="8,2"
+                                                Margin="10,0,0,0"
+                                                VerticalAlignment="Center"
+                                                ToolTip="Pinned">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE718;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="12"
+                                                           Foreground="White"
+                                                           Margin="0,0,4,0"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Text="PINNED"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="White"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <Border.Style>
+                                                <Style TargetType="{x:Type Border}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                        </Border>
+                                    </Grid>
                                     <TextBlock Grid.Row="1"
                                                Text="{Binding DisplaySubtitle}"
                                                Foreground="{StaticResource TextSecondary}"

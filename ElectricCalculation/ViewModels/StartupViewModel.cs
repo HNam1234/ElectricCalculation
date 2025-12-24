@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -12,17 +13,17 @@ using ElectricCalculation.Views;
 
 namespace ElectricCalculation.ViewModels
 {
-    public sealed record SnapshotItem(string Path, string PeriodLabel, string? SnapshotName, DateTime SavedAt)
+    public sealed record SnapshotItem(
+        string Path,
+        string DisplayTitle,
+        string DisplaySubtitle,
+        bool IsPinned,
+        DateTime? PinnedAtUtc,
+        DateTime SavedAt)
     {
-        public string DisplayTitle
-        {
-            get
-            {
-                var period = string.IsNullOrWhiteSpace(PeriodLabel) ? "(Không rõ kỳ tính)" : PeriodLabel;
-                return string.IsNullOrWhiteSpace(SnapshotName) ? period : $"{period} - {SnapshotName}";
-            }
-        }
-        public string DisplaySubtitle => $"{SavedAt:dd/MM/yyyy HH:mm:ss}";
+        public bool CanDelete => true;
+        public bool CanTogglePin => true;
+        public string PinMenuText => IsPinned ? "Unpin" : "Pin";
     }
 
     public partial class StartupViewModel : ObservableObject
@@ -37,6 +38,7 @@ namespace ElectricCalculation.ViewModels
         public StartupViewModel()
         {
             _ui = new UiService();
+            _ = SampleDataService.TrySeedJune2025SampleSnapshotOnce();
             RefreshSnapshots();
         }
 
@@ -45,10 +47,49 @@ namespace ElectricCalculation.ViewModels
         {
             try
             {
-                RecentSnapshots.Clear();
-                foreach (var item in SaveGameService.ListSnapshots(maxCount: 50))
+                var keepSelectedPath = SelectedSnapshot?.Path;
+
+                var snapshots = SaveGameService.ListSnapshots(maxCount: 50);
+
+                var pins = PinnedDatasetService.LoadPins();
+                if (PinnedDatasetService.TryCleanupMissingPins(pins, snapshots.Select(s => s.Path)))
                 {
-                    RecentSnapshots.Add(new SnapshotItem(item.Path, item.PeriodLabel, item.SnapshotName, item.SavedAt));
+                    PinnedDatasetService.SavePins(pins);
+                }
+
+                RecentSnapshots.Clear();
+
+                var items = new List<SnapshotItem>();
+
+                foreach (var snapshot in snapshots)
+                {
+                    var period = string.IsNullOrWhiteSpace(snapshot.PeriodLabel) ? "(Unknown period)" : snapshot.PeriodLabel;
+                    var title = string.IsNullOrWhiteSpace(snapshot.SnapshotName) ? period : $"{period} - {snapshot.SnapshotName}";
+                    var subtitle = $"{snapshot.SavedAt:dd/MM/yyyy HH:mm:ss}";
+
+                    var isPinned = pins.TryGetValue(snapshot.Path, out var pinnedAtUtc);
+                    items.Add(new SnapshotItem(
+                        snapshot.Path,
+                        title,
+                        subtitle,
+                        IsPinned: isPinned,
+                        PinnedAtUtc: isPinned ? pinnedAtUtc : null,
+                        SavedAt: snapshot.SavedAt));
+                }
+
+                foreach (var item in items
+                    .OrderByDescending(i => i.IsPinned)
+                    .ThenByDescending(i => i.PinnedAtUtc ?? DateTime.MinValue)
+                    .ThenByDescending(i => i.SavedAt)
+                    .ThenBy(i => i.DisplayTitle, StringComparer.OrdinalIgnoreCase))
+                {
+                    RecentSnapshots.Add(item);
+                }
+
+                if (!string.IsNullOrWhiteSpace(keepSelectedPath))
+                {
+                    SelectedSnapshot = RecentSnapshots.FirstOrDefault(i =>
+                        string.Equals(i.Path, keepSelectedPath, StringComparison.OrdinalIgnoreCase));
                 }
             }
             catch (Exception ex)
@@ -96,32 +137,21 @@ namespace ElectricCalculation.ViewModels
             });
         }
 
-        private static bool IsSnapshotPath(string filePath)
-        {
-            try
-            {
-                var root = Path.GetFullPath(SaveGameService.GetSaveRootDirectory())
-                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                    + Path.DirectorySeparatorChar;
-
-                var fullPath = Path.GetFullPath(filePath);
-                return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         [RelayCommand]
         private void ContinueLatestSnapshot()
         {
             try
             {
-                var latest = SaveGameService.GetLatestSnapshotPath();
+                // Prefer the newest item in the current list (top snapshot section),
+                // so the "continue" action matches what users see on Startup.
+                RefreshSnapshots();
+
+                var latest = RecentSnapshots.FirstOrDefault(i => !i.IsPinned)?.Path
+                    ?? RecentSnapshots.FirstOrDefault()?.Path;
+
                 if (string.IsNullOrWhiteSpace(latest))
                 {
-                    throw new WarningException("Chưa có snapshot nào để tiếp tục.");
+                    throw new WarningException("No snapshot to continue.");
                 }
 
                 OpenEditorWindow(editor => editor.LoadSnapshotFile(latest));
@@ -139,10 +169,40 @@ namespace ElectricCalculation.ViewModels
             {
                 if (SelectedSnapshot == null)
                 {
-                    throw new WarningException("Chọn 1 snapshot trong danh sách trước.");
+                    throw new WarningException("Select a dataset first.");
                 }
 
-                OpenEditorWindow(editor => editor.LoadSnapshotFile(SelectedSnapshot.Path));
+                var item = SelectedSnapshot;
+                OpenEditorWindow(editor => editor.LoadSnapshotFile(item.Path));
+            }
+            catch (Exception ex)
+            {
+                HandleRequestError(ex);
+            }
+        }
+
+        [RelayCommand]
+        private void TogglePinSelectedSnapshot()
+        {
+            try
+            {
+                if (SelectedSnapshot == null)
+                {
+                    throw new WarningException("Select a dataset first.");
+                }
+
+                var pins = PinnedDatasetService.LoadPins();
+                if (pins.ContainsKey(SelectedSnapshot.Path))
+                {
+                    pins.Remove(SelectedSnapshot.Path);
+                }
+                else
+                {
+                    pins[SelectedSnapshot.Path] = DateTime.UtcNow;
+                }
+
+                PinnedDatasetService.SavePins(pins);
+                RefreshSnapshots();
             }
             catch (Exception ex)
             {
@@ -157,29 +217,31 @@ namespace ElectricCalculation.ViewModels
             {
                 if (SelectedSnapshot == null)
                 {
-                    throw new WarningException("Ch ¯?n 1 snapshot trong danh sA­ch tr’ø ¯>c.");
+                    throw new WarningException("Select a dataset first.");
                 }
 
                 var snapshot = SelectedSnapshot;
                 var ok = _ui.Confirm(
-                    "Xóa bộ dữ liệu",
-                    $"Bạn có chắc muốn xóa bộ dữ liệu này không?\n\n{snapshot.DisplayTitle}\n{snapshot.Path}");
+                    "Delete dataset",
+                    $"Delete this dataset?\n\n{snapshot.DisplayTitle}\n{snapshot.Path}");
 
                 if (!ok)
                 {
                     return;
                 }
 
-                if (!SaveGameService.TryDeleteSnapshot(snapshot.Path, out var error))
+                var pins = PinnedDatasetService.LoadPins();
+                if (pins.Remove(snapshot.Path))
                 {
-                    throw new WarningException(error ?? "Không thể xóa bộ dữ liệu.");
+                    PinnedDatasetService.SavePins(pins);
                 }
 
-                RecentSnapshots.Remove(snapshot);
-                if (ReferenceEquals(SelectedSnapshot, snapshot))
+                if (!SaveGameService.TryDeleteSnapshot(snapshot.Path, out var error))
                 {
-                    SelectedSnapshot = null;
+                    throw new WarningException(error ?? "Failed to delete dataset.");
                 }
+
+                RefreshSnapshots();
             }
             catch (Exception ex)
             {
@@ -214,6 +276,23 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
+        private static bool IsSnapshotPath(string filePath)
+        {
+            try
+            {
+                var root = Path.GetFullPath(SaveGameService.GetSaveRootDirectory())
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    + Path.DirectorySeparatorChar;
+
+                var fullPath = Path.GetFullPath(filePath);
+                return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void OpenEditorWindow(Action<MainWindowViewModel>? init)
         {
             var editorWindow = new MainWindow();
@@ -222,7 +301,16 @@ namespace ElectricCalculation.ViewModels
                 throw new InvalidOperationException("MainWindow DataContext is not MainWindowViewModel.");
             }
 
-            init?.Invoke(editorVm);
+            try
+            {
+                init?.Invoke(editorVm);
+            }
+            catch (Exception ex)
+            {
+                editorWindow.Close();
+                HandleRequestError(ex);
+                return;
+            }
 
             Application.Current.MainWindow = editorWindow;
             editorWindow.Show();
@@ -240,11 +328,11 @@ namespace ElectricCalculation.ViewModels
 
             if (ex is WarningException warning)
             {
-                _ui.ShowMessage("Thông báo", warning.Message);
+                _ui.ShowMessage("Notice", warning.Message);
                 return;
             }
 
-            _ui.ShowMessage("Lỗi", ex.Message);
+            _ui.ShowMessage("Error", ex.Message);
         }
     }
 }

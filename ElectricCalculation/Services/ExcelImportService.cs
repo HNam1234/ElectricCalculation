@@ -35,7 +35,6 @@ namespace ElectricCalculation.Services
             PreviousIndex,
             Multiplier,
             SubsidizedKwh,
-            SubsidizedPercent,
             UnitPrice,
             PerformedBy
         }
@@ -315,7 +314,6 @@ namespace ElectricCalculation.Services
                 customer.PreviousIndex = GetMappedDecimal(cells, headerMap, ImportField.PreviousIndex, fallbackColumn: "P");
                 customer.Multiplier = GetMappedDecimal(cells, headerMap, ImportField.Multiplier, fallbackColumn: "Q");
                 customer.SubsidizedKwh = GetMappedDecimal(cells, headerMap, ImportField.SubsidizedKwh, fallbackColumn: "S");
-                customer.SubsidizedPercent = GetMappedDecimal(cells, headerMap, ImportField.SubsidizedPercent, fallbackColumn: string.Empty);
                 customer.UnitPrice = GetMappedDecimal(cells, headerMap, ImportField.UnitPrice, fallbackColumn: "U");
 
                 customer.PerformedBy = (GetMappedString(cells, headerMap, ImportField.PerformedBy, fallbackColumn: "W") ?? string.Empty).Trim();
@@ -529,12 +527,6 @@ namespace ElectricCalculation.Services
 
             if (ContainsAny(normalizedHeader, "bao cap", "tro cap", "mien giam"))
             {
-                if (normalizedHeader.Contains("%", StringComparison.OrdinalIgnoreCase) ||
-                    normalizedHeader.Contains("phan tram", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ImportField.SubsidizedPercent;
-                }
-
                 return ImportField.SubsidizedKwh;
             }
 

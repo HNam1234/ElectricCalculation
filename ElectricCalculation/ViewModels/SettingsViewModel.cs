@@ -21,9 +21,6 @@ namespace ElectricCalculation.ViewModels
         private string defaultSubsidizedKwh = "0";
 
         [ObservableProperty]
-        private string defaultSubsidizedPercent = "0";
-
-        [ObservableProperty]
         private string defaultPerformedBy = string.Empty;
 
         [ObservableProperty]
@@ -44,7 +41,6 @@ namespace ElectricCalculation.ViewModels
             DefaultUnitPrice = s.DefaultUnitPrice.ToString("0.##", CultureInfo.CurrentCulture);
             DefaultMultiplier = s.DefaultMultiplier.ToString("0.##", CultureInfo.CurrentCulture);
             DefaultSubsidizedKwh = s.DefaultSubsidizedKwh.ToString("0.##", CultureInfo.CurrentCulture);
-            DefaultSubsidizedPercent = s.DefaultSubsidizedPercent.ToString("0.##", CultureInfo.CurrentCulture);
             DefaultPerformedBy = s.DefaultPerformedBy ?? string.Empty;
             ApplyDefaultsOnNewRow = s.ApplyDefaultsOnNewRow;
             ApplyDefaultsOnImport = s.ApplyDefaultsOnImport;
@@ -57,8 +53,7 @@ namespace ElectricCalculation.ViewModels
 
             if (!TryParseDecimal(DefaultUnitPrice, out var unitPrice, allowNegative: false) ||
                 !TryParseDecimal(DefaultMultiplier, out var multiplier, allowNegative: false) ||
-                !TryParseDecimal(DefaultSubsidizedKwh, out var subsidizedKwh, allowNegative: false) ||
-                !TryParseDecimal(DefaultSubsidizedPercent, out var subsidizedPercent, allowNegative: false))
+                !TryParseDecimal(DefaultSubsidizedKwh, out var subsidizedKwh, allowNegative: false))
             {
                 throw new InvalidOperationException("Invalid numeric input.");
             }
@@ -73,7 +68,6 @@ namespace ElectricCalculation.ViewModels
                 DefaultUnitPrice = unitPrice,
                 DefaultMultiplier = multiplier,
                 DefaultSubsidizedKwh = subsidizedKwh,
-                DefaultSubsidizedPercent = subsidizedPercent,
                 DefaultPerformedBy = DefaultPerformedBy ?? string.Empty,
                 ApplyDefaultsOnNewRow = ApplyDefaultsOnNewRow,
                 ApplyDefaultsOnImport = ApplyDefaultsOnImport,
@@ -130,4 +124,3 @@ namespace ElectricCalculation.ViewModels
         }
     }
 }
-

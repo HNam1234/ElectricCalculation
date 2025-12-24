@@ -52,7 +52,7 @@
                         <TextBlock Text="{Binding Customer.PreviousIndex, StringFormat='Chỉ số cũ: {0:N0}'}" />
                         <TextBlock Text="{Binding Customer.CurrentIndex, StringFormat='Chỉ số mới: {0:N0}'}" />
                         <TextBlock Text="{Binding Customer.Multiplier, StringFormat='Hệ số: {0:N2}'}" />
-                        <TextBlock Text="{Binding Customer.EffectiveSubsidizedKwh, StringFormat='Bao cấp (kWh): {0:N0}'}" />
+                        <TextBlock Text="{Binding Customer.SubsidizedKwh, StringFormat='Bao cấp (kWh): {0:N0}'}" />
                         <TextBlock Text="{Binding Customer.UnitPrice, StringFormat='Đơn giá (VNĐ/kWh): {0:N0}'}" />
                     </StackPanel>
 
