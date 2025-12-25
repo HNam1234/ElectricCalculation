@@ -57,6 +57,15 @@ namespace ElectricCalculation.ViewModels
         [ObservableProperty]
         private bool isRouteEntryMode = true;
 
+        [ObservableProperty]
+        private bool filterMissing;
+
+        [ObservableProperty]
+        private bool filterWarning;
+
+        [ObservableProperty]
+        private bool filterError;
+
         public bool IsDetailMode => !IsFastEntryMode;
 
         public string RouteEntryProgressText => BuildRouteEntryProgressText();
@@ -1615,6 +1624,19 @@ namespace ElectricCalculation.ViewModels
                 return false;
             }
 
+            if (FilterMissing || FilterWarning || FilterError)
+            {
+                var matchesStatus =
+                    (FilterMissing && customer.IsMissingReading) ||
+                    (FilterWarning && customer.HasUsageWarning) ||
+                    (FilterError && customer.HasReadingError);
+
+                if (!matchesStatus)
+                {
+                    return false;
+                }
+            }
+
             if (string.IsNullOrWhiteSpace(SearchText))
             {
                 return true;
@@ -1655,6 +1677,27 @@ namespace ElectricCalculation.ViewModels
         }
 
         partial void OnSelectedSearchFieldChanged(string value)
+        {
+            CustomersView.Refresh();
+            NotifySummaryChanged();
+            NotifyRouteEntryProgressChanged();
+        }
+
+        partial void OnFilterMissingChanged(bool value)
+        {
+            CustomersView.Refresh();
+            NotifySummaryChanged();
+            NotifyRouteEntryProgressChanged();
+        }
+
+        partial void OnFilterWarningChanged(bool value)
+        {
+            CustomersView.Refresh();
+            NotifySummaryChanged();
+            NotifyRouteEntryProgressChanged();
+        }
+
+        partial void OnFilterErrorChanged(bool value)
         {
             CustomersView.Refresh();
             NotifySummaryChanged();

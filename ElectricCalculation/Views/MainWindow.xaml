@@ -22,6 +22,155 @@
     <Window.Resources>
         <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <SolidColorBrush x:Key="AccentBrush" Color="#2563EB" />
+        <SolidColorBrush x:Key="AccentBrushDark" Color="#1D4ED8" />
+        <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#FFE5E7EB" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#FF475569" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FF111827" />
+
+        <Style x:Key="ModeToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="180" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="OuterBorder"
+                                CornerRadius="15"
+                                BorderBrush="{StaticResource SurfaceBorderBrush}"
+                                BorderThickness="1"
+                                Background="#FFF1F5F9"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border x:Name="LeftSegment"
+                                        Grid.Column="0"
+                                        CornerRadius="15,0,0,15"
+                                        Background="#FFDBEAFE" />
+                                <Border x:Name="RightSegment"
+                                        Grid.Column="1"
+                                        CornerRadius="0,15,15,0"
+                                        Background="Transparent" />
+
+                                <TextBlock x:Name="LeftText"
+                                           Grid.Column="0"
+                                           Text="Nhập nhanh"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <TextBlock x:Name="RightText"
+                                           Grid.Column="1"
+                                           Text="Chi tiết"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                            </Grid>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="False">
+                                <Setter TargetName="LeftSegment" Property="Background" Value="Transparent" />
+                                <Setter TargetName="RightSegment" Property="Background" Value="#FFDBEAFE" />
+                                <Setter TargetName="LeftText" Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                <Setter TargetName="RightText" Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            </Trigger>
+
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{StaticResource AccentBrushDark}" />
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DataGridColumnHeaderBaseStyle" TargetType="{x:Type DataGridColumnHeader}">
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center">
+                            <Border x:Name="FastEntryMarker"
+                                    Width="3"
+                                    Height="14"
+                                    CornerRadius="2"
+                                    Background="{StaticResource AccentBrush}"
+                                    Margin="0,0,6,0"
+                                    Visibility="Collapsed" />
+                            <TextBlock Text="{Binding}"
+                                       TextAlignment="Center"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding}" />
+                        </StackPanel>
+
+                        <DataTemplate.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding}" Value="Chỉ số mới" />
+                                    <Condition Binding="{Binding Data.IsFastEntryMode, Source={StaticResource VmProxy}}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter TargetName="FastEntryMarker" Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FilterToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="MinWidth" Value="72" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="Outer"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{StaticResource SurfaceBorderBrush}"
+                                Background="#FFF1F5F9"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Outer" Property="BorderBrush" Value="{StaticResource AccentBrushDark}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Outer" Property="Background" Value="#FFDBEAFE" />
+                                <Setter TargetName="Outer" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Window.InputBindings>
@@ -107,68 +256,109 @@
         </Menu>
 
         <StackPanel Grid.Row="1" Margin="0,0,0,8">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding RouteEntryProgressText}"
-                           Visibility="{Binding IsRouteEntryMode, Converter={StaticResource BoolToVisibility}}"
-                           Margin="0,0,16,0" />
-                <Button Content="Trang chủ"
-                        Padding="12,4"
-                        Margin="0,0,16,0"
-                        Click="BackToHome_Click" />
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          CanContentScroll="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <TextBlock Text="Kỳ tính:"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0" />
-                <TextBox Width="150"
-                         VerticalAlignment="Center"
-                         Text="{Binding PeriodLabel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <StackPanel Grid.Row="0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Content="Trang chủ"
+                                Padding="12,4"
+                                Margin="0,0,16,0"
+                                Click="BackToHome_Click" />
 
-                <Button Content="Thêm dòng"
-                        Margin="16,0,0,0"
-                        Padding="12,4"
-                        Command="{Binding AddRowCommand}" />
+                        <TextBlock Text="Kỳ tính:"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0" />
+                        <TextBox Width="150"
+                                 VerticalAlignment="Center"
+                                 Text="{Binding PeriodLabel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                <TextBlock Text="Người lập đơn:"
-                           VerticalAlignment="Center"
-                           Margin="24,0,4,0" />
-                <TextBox Width="160"
-                         VerticalAlignment="Center"
-                         Text="{Binding InvoiceIssuer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Thêm dòng"
+                                Margin="16,0,0,0"
+                                Padding="12,4"
+                                Command="{Binding AddRowCommand}" />
 
-                <TextBlock Text="Tìm:"
-                           VerticalAlignment="Center"
-                           Margin="24,0,4,0" />
-                <ComboBox Width="150"
-                          ItemsSource="{Binding SearchFields}"
-                          SelectedItem="{Binding SelectedSearchField, Mode=TwoWay}"
-                          VerticalAlignment="Center" />
-                <TextBox x:Name="SearchTextBox"
-                         Width="220"
-                         Margin="4,0,0,0"
-                         VerticalAlignment="Center"
-                         Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="Người lập đơn:"
+                                   VerticalAlignment="Center"
+                                   Margin="24,0,4,0" />
+                        <TextBox Width="160"
+                                 VerticalAlignment="Center"
+                                 Text="{Binding InvoiceIssuer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                <ToggleButton Margin="12,0,0,0"
-                              Padding="12,4"
-                              IsChecked="{Binding IsFastEntryMode, Mode=TwoWay}">
-                    <ToggleButton.Style>
-                        <Style TargetType="{x:Type ToggleButton}">
-                            <Setter Property="Content" Value="Nhập nhanh" />
-                            <Style.Triggers>
-                                <Trigger Property="IsChecked" Value="False">
-                                    <Setter Property="Content" Value="Chi tiết" />
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ToggleButton.Style>
-                </ToggleButton>
+                        <TextBlock Text="Tìm:"
+                                   VerticalAlignment="Center"
+                                   Margin="24,0,4,0" />
+                        <ComboBox Width="150"
+                                  ItemsSource="{Binding SearchFields}"
+                                  SelectedItem="{Binding SelectedSearchField, Mode=TwoWay}"
+                                  VerticalAlignment="Center" />
+                        <TextBox x:Name="SearchTextBox"
+                                 Width="220"
+                                 Margin="4,0,0,0"
+                                 VerticalAlignment="Center"
+                                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
 
-                <CheckBox Content="Nhập theo tuyến"
-                          Margin="12,0,0,0"
-                          VerticalAlignment="Center"
-                          IsChecked="{Binding IsRouteEntryMode, Mode=TwoWay}" />
+                    <StackPanel Grid.Row="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,6,0,0">
+                        <TextBlock Text="Chế độ:"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,4,0" />
+                        <ToggleButton Style="{StaticResource ModeToggleButtonStyle}"
+                                      ToolTip="Nhập nhanh: khóa vào cột Chỉ số mới. Enter để xuống dòng."
+                                      IsChecked="{Binding IsFastEntryMode, Mode=TwoWay}" />
 
-            </StackPanel>
+                        <CheckBox Content="Nhập theo tuyến"
+                                  Margin="12,0,0,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding IsRouteEntryMode, Mode=TwoWay}" />
+
+                        <TextBlock Text="Lọc:"
+                                   Margin="24,0,4,0"
+                                   VerticalAlignment="Center" />
+                        <ToggleButton Content="Thiếu"
+                                      Style="{StaticResource FilterToggleButtonStyle}"
+                                      ToolTip="Chỉ hiện khách thiếu chỉ số mới"
+                                      IsChecked="{Binding FilterMissing, Mode=TwoWay}" />
+                        <ToggleButton Content="Cảnh báo"
+                                      Style="{StaticResource FilterToggleButtonStyle}"
+                                      ToolTip="Chỉ hiện khách có cảnh báo kWh tăng cao"
+                                      IsChecked="{Binding FilterWarning, Mode=TwoWay}" />
+                        <ToggleButton Content="Lỗi"
+                                      Style="{StaticResource FilterToggleButtonStyle}"
+                                      ToolTip="Chỉ hiện khách có lỗi chỉ số"
+                                      IsChecked="{Binding FilterError, Mode=TwoWay}" />
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+
+            <Border Background="#EFF6FF"
+                    BorderBrush="{StaticResource AccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="8"
+                    Margin="0,8,0,0"
+                    Visibility="{Binding IsFastEntryMode, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock TextWrapping="Wrap">
+                    <Run Text="NHẬP NHANH: " FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                    <Run Text="nhập chỉ số ở cột " />
+                    <Run Text="Chỉ số mới" FontWeight="SemiBold" />
+                    <Run Text=", nhấn " />
+                    <Run Text="Enter" FontWeight="SemiBold" />
+                    <Run Text=" để xuống dòng. Chuyển sang " />
+                    <Run Text="Chi tiết" FontWeight="SemiBold" />
+                    <Run Text=" để thoát nhập nhanh." />
+                </TextBlock>
+            </Border>
 
         </StackPanel>
 
@@ -216,11 +406,19 @@
             <DataGrid.CellStyle>
                 <Style TargetType="{x:Type DataGridCell}">
                     <Setter Property="Padding" Value="6,2" />
+                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#FFDBEAFE" />
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                        </Trigger>
+                    </Style.Triggers>
                 </Style>
             </DataGrid.CellStyle>
 
             <DataGrid.RowStyle>
                 <Style TargetType="{x:Type DataGridRow}">
+                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding HasUsageWarning}" Value="True">
                             <Setter Property="Background" Value="#FFFFEDD5" />
@@ -228,27 +426,17 @@
                         <DataTrigger Binding="{Binding HasReadingError}" Value="True">
                             <Setter Property="Background" Value="#FFFEE2E2" />
                         </DataTrigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#FFDBEAFE" />
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                        </Trigger>
                     </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
 
             <DataGrid.ColumnHeaderStyle>
-                <Style TargetType="{x:Type DataGridColumnHeader}">
-                    <Setter Property="Padding" Value="6,4" />
-                    <Setter Property="HorizontalContentAlignment" Value="Center" />
-                    <Setter Property="VerticalContentAlignment" Value="Center" />
-                    <Setter Property="ContentTemplate">
-                        <Setter.Value>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}"
-                                           TextAlignment="Center"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"
-                                           ToolTip="{Binding}" />
-                            </DataTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
+                <Style TargetType="{x:Type DataGridColumnHeader}"
+                       BasedOn="{StaticResource DataGridColumnHeaderBaseStyle}" />
             </DataGrid.ColumnHeaderStyle>
 
             <DataGrid.ContextMenu>
@@ -330,26 +518,37 @@
                 <DataGridTextColumn Header="Chỉ số mới"
                                     Binding="{Binding CurrentIndex, UpdateSourceTrigger=PropertyChanged}"
                                     Width="100">
-                    <DataGridTextColumn.CellStyle>
-                        <Style TargetType="{x:Type DataGridCell}">
-                            <Setter Property="Padding" Value="6,2" />
-                             <Style.Triggers>
-                                 <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
-                                     <Setter Property="Background" Value="#FFFEF3C7" />
-                                 </DataTrigger>
-                                 <DataTrigger Binding="{Binding IsZeroUsage}" Value="True">
-                                     <Setter Property="Background" Value="#FFE0F2FE" />
-                                 </DataTrigger>
-                             </Style.Triggers>
-                         </Style>
-                     </DataGridTextColumn.CellStyle>
-                     <DataGridTextColumn.EditingElementStyle>
-                         <Style TargetType="{x:Type TextBox}">
-                             <Style.Triggers>
-                                 <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
-                                     <Setter Property="Background" Value="#FFFEF3C7" />
-                                 </DataTrigger>
-                                 <DataTrigger Binding="{Binding IsZeroUsage}" Value="True">
+                     <DataGridTextColumn.CellStyle>
+                         <Style TargetType="{x:Type DataGridCell}">
+                             <Setter Property="Padding" Value="6,2" />
+                             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                              <Style.Triggers>
+                                  <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                      <Setter Property="Background" Value="#FFFEF3C7" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding IsZeroUsage}" Value="True">
+                                      <Setter Property="Background" Value="#FFE0F2FE" />
+                                  </DataTrigger>
+                                  <Trigger Property="IsSelected" Value="True">
+                                      <Setter Property="Background" Value="#FFDBEAFE" />
+                                  </Trigger>
+                              </Style.Triggers>
+                          </Style>
+                      </DataGridTextColumn.CellStyle>
+                      <DataGridTextColumn.EditingElementStyle>
+                           <Style TargetType="{x:Type TextBox}">
+                               <Setter Property="VerticalContentAlignment" Value="Center" />
+                               <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                               <Style.Triggers>
+                                   <DataTrigger Binding="{Binding Data.IsFastEntryMode, Source={StaticResource VmProxy}}" Value="True">
+                                       <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                       <Setter Property="BorderThickness" Value="2" />
+                                      <Setter Property="Background" Value="#EEF2FF" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                      <Setter Property="Background" Value="#FFFEF3C7" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding IsZeroUsage}" Value="True">
                                      <Setter Property="Background" Value="#FFE0F2FE" />
                                  </DataTrigger>
                              </Style.Triggers>
@@ -431,6 +630,12 @@
                 Padding="10"
                 Margin="0,8,0,0">
             <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding RouteEntryProgressText}"
+                           Width="260"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding RouteEntryProgressText}"
+                           Visibility="{Binding IsRouteEntryMode, Converter={StaticResource BoolToVisibility}}"
+                           Margin="0,0,16,0" />
                 <TextBlock Text="{Binding CustomerCount, StringFormat=Tổng: {0}}" />
                 <TextBlock Text="{Binding CompletedCount, StringFormat=  |  Đã nhập: {0}}"
                            Margin="16,0,0,0" />
