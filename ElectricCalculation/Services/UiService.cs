@@ -268,9 +268,8 @@ namespace ElectricCalculation.Services
             window.ShowDialog();
         }
 
-        public NewPeriodViewModel? ShowNewPeriodDialog()
+        public NewPeriodViewModel? ShowNewPeriodDialog(NewPeriodViewModel vm)
         {
-            var vm = new NewPeriodViewModel();
             var window = new NewPeriodWindow
             {
                 Owner = GetOwner(),
@@ -278,6 +277,11 @@ namespace ElectricCalculation.Services
             };
 
             return window.ShowDialog() == true ? vm : null;
+        }
+
+        public NewPeriodViewModel? ShowNewPeriodDialog()
+        {
+            return ShowNewPeriodDialog(new NewPeriodViewModel());
         }
 
         public PrintRangeViewModel? ShowPrintRangeDialog(int defaultFrom, int defaultTo)

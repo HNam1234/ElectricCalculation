@@ -52,18 +52,28 @@ namespace ElectricCalculation.Models
         [NotifyPropertyChangedFor(nameof(Consumption))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
         [NotifyPropertyChangedFor(nameof(Amount))]
+        [NotifyPropertyChangedFor(nameof(IsMissingReading))]
+        [NotifyPropertyChangedFor(nameof(HasReadingError))]
+        [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
+        [NotifyPropertyChangedFor(nameof(StatusText))]
         private decimal previousIndex;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Consumption))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
         [NotifyPropertyChangedFor(nameof(Amount))]
-        private decimal currentIndex;
+        [NotifyPropertyChangedFor(nameof(IsMissingReading))]
+        [NotifyPropertyChangedFor(nameof(HasReadingError))]
+        [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
+        [NotifyPropertyChangedFor(nameof(StatusText))]
+        private decimal? currentIndex;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Consumption))]
         [NotifyPropertyChangedFor(nameof(ChargeableKwh))]
         [NotifyPropertyChangedFor(nameof(Amount))]
+        [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
+        [NotifyPropertyChangedFor(nameof(StatusText))]
         private decimal multiplier = 1;
 
         [ObservableProperty]
@@ -75,11 +85,66 @@ namespace ElectricCalculation.Models
         [NotifyPropertyChangedFor(nameof(Amount))]
         private decimal unitPrice;
 
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
+        [NotifyPropertyChangedFor(nameof(StatusText))]
+        private decimal? averageConsumption3Periods;
+
+        public bool IsMissingReading => CurrentIndex == null;
+
+        public bool HasReadingError => CurrentIndex != null && CurrentIndex.Value < PreviousIndex;
+
+        public bool HasUsageWarning
+        {
+            get
+            {
+                if (CurrentIndex == null || HasReadingError)
+                {
+                    return false;
+                }
+
+                if (AverageConsumption3Periods == null || AverageConsumption3Periods <= 0)
+                {
+                    return false;
+                }
+
+                return Consumption > AverageConsumption3Periods.Value * 2;
+            }
+        }
+
+        public string StatusText
+        {
+            get
+            {
+                if (IsMissingReading)
+                {
+                    return "Thiếu chỉ số";
+                }
+
+                if (HasReadingError)
+                {
+                    return "Lỗi: CS mới < CS cũ";
+                }
+
+                if (HasUsageWarning)
+                {
+                    return "Cảnh báo: Tăng cao";
+                }
+
+                return "OK";
+            }
+        }
+
         public decimal Consumption
         {
             get
             {
-                var delta = CurrentIndex - PreviousIndex;
+                if (CurrentIndex == null)
+                {
+                    return 0;
+                }
+
+                var delta = CurrentIndex.Value - PreviousIndex;
                 if (delta <= 0 || Multiplier <= 0)
                 {
                     return 0;

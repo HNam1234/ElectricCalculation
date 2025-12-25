@@ -824,7 +824,7 @@ namespace ElectricCalculation.Services
             }
         }
 
-        private static void UpdateNumberCell(XElement sheetDataElement, XNamespace ns, string cellReference, decimal value)
+        private static void UpdateNumberCell(XElement sheetDataElement, XNamespace ns, string cellReference, decimal? value)
         {
             if (string.IsNullOrEmpty(cellReference))
             {
@@ -869,8 +869,11 @@ namespace ElectricCalculation.Services
             cell.Elements(ns + "is").Remove();
             cell.Elements(ns + "v").Remove();
 
-            var vElement = new XElement(ns + "v", value.ToString(CultureInfo.InvariantCulture));
-            cell.Add(vElement);
+            if (value != null)
+            {
+                var vElement = new XElement(ns + "v", value.Value.ToString(CultureInfo.InvariantCulture));
+                cell.Add(vElement);
+            }
 
             if (!string.IsNullOrEmpty(styleAttr))
             {

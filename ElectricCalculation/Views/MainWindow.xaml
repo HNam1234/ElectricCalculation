@@ -11,7 +11,9 @@
         Width="1280"
         WindowStartupLocation="CenterScreen"
         Closing="MainWindow_Closing"
-        PreviewKeyDown="MainWindow_PreviewKeyDown">
+        behaviors:ShortcutFocusBehavior.Key="F"
+        behaviors:ShortcutFocusBehavior.Modifiers="Control"
+        behaviors:ShortcutFocusBehavior.Target="{Binding ElementName=SearchTextBox}">
     <Window.DataContext>
         <vm:MainWindowViewModel />
     </Window.DataContext>
@@ -141,80 +143,8 @@
                          VerticalAlignment="Center"
                          Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                <Button Content="Nhập nhanh"
-                        Margin="16,0,0,0"
-                        Padding="12,4"
-                        Command="{Binding ToggleQuickDefaultsCommand}" />
             </StackPanel>
 
-            <Expander Header="Nhập nhanh"
-                      IsExpanded="{Binding IsQuickDefaultsExpanded}"
-                      Margin="0,8,0,0">
-                <Border Background="#FFFFFFFF"
-                        BorderBrush="#FFE5E7EB"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="10">
-                    <StackPanel>
-                        <WrapPanel>
-                            <TextBlock Text="Đơn giá:"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0" />
-                            <TextBox Width="90"
-                                     VerticalAlignment="Center"
-                                     Text="{Binding QuickDefaultUnitPrice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                            <TextBlock Text="Hệ số:"
-                                       VerticalAlignment="Center"
-                                       Margin="16,0,6,0" />
-                            <TextBox Width="70"
-                                     VerticalAlignment="Center"
-                                     Text="{Binding QuickDefaultMultiplier, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                            <TextBlock Text="Bao cấp kWh:"
-                                       VerticalAlignment="Center"
-                                       Margin="16,0,6,0" />
-                            <TextBox Width="80"
-                                     VerticalAlignment="Center"
-                                     Text="{Binding QuickDefaultSubsidizedKwh, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                            <TextBlock Text="Người ghi:"
-                                       VerticalAlignment="Center"
-                                       Margin="16,0,6,0" />
-                            <TextBox Width="180"
-                                     VerticalAlignment="Center"
-                                     Text="{Binding QuickDefaultPerformedBy, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                            <CheckBox Content="Áp dụng khi thêm dòng"
-                                      Margin="16,0,0,0"
-                                      VerticalAlignment="Center"
-                                      IsChecked="{Binding QuickApplyDefaultsOnNewRow, Mode=TwoWay}" />
-                            <CheckBox Content="Áp dụng khi import"
-                                      Margin="12,0,0,0"
-                                      VerticalAlignment="Center"
-                                      IsChecked="{Binding QuickApplyDefaultsOnImport, Mode=TwoWay}" />
-                        </WrapPanel>
-
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Right"
-                                    Margin="0,10,0,0">
-                            <Button Content="Áp dụng cho dòng chọn"
-                                    Margin="0,0,8,0"
-                                    Padding="14,6"
-                                    Command="{Binding ApplyQuickDefaultsToSelectedCommand}"
-                                    CommandParameter="{Binding SelectedItems, ElementName=CustomerGrid}" />
-                            <Button Content="Áp dụng cho danh sách đang lọc"
-                                    Padding="14,6"
-                                    Command="{Binding ApplyQuickDefaultsToFilteredCommand}" />
-                        </StackPanel>
-
-                        <TextBlock Text="{Binding QuickDefaultsErrorMessage}"
-                                   Foreground="#C00000"
-                                   Margin="0,8,0,0"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </Expander>
         </StackPanel>
 
         <DataGrid x:Name="CustomerGrid"
@@ -242,12 +172,29 @@
                   behaviors:DataGridEditHistoryBehavior.FillDownCommand="{Binding FillDownCommand}"
                   behaviors:DataGridEditHistoryBehavior.DeleteSelectedRowsCommand="{Binding DeleteSelectedRowsCommand}"
                   behaviors:DataGridEditHistoryBehavior.DuplicateRowCommand="{Binding DuplicateRowCommand}"
+                  behaviors:DataGridEnterToNextRowBehavior.IsEnabled="True"
+                  behaviors:DataGridEnterToNextRowBehavior.TargetPropertyName="CurrentIndex"
+                  behaviors:DataGridEnterToNextRowBehavior.SelectAllOnEdit="True"
                   SelectedItem="{Binding SelectedCustomer, Mode=TwoWay}">
             <DataGrid.CellStyle>
                 <Style TargetType="{x:Type DataGridCell}">
                     <Setter Property="Padding" Value="6,2" />
                 </Style>
             </DataGrid.CellStyle>
+
+            <DataGrid.RowStyle>
+                <Style TargetType="{x:Type DataGridRow}">
+                    <Setter Property="ToolTip" Value="{Binding StatusText}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasUsageWarning}" Value="True">
+                            <Setter Property="Background" Value="#FFFFEDD5" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding HasReadingError}" Value="True">
+                            <Setter Property="Background" Value="#FFFEE2E2" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
 
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="{x:Type DataGridColumnHeader}">
@@ -270,18 +217,6 @@
 
             <DataGrid.ContextMenu>
                 <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                    <MenuItem Header="Nhập nhanh: Áp dụng cho dòng chọn"
-                              Command="{Binding ApplyQuickDefaultsToSelectedCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                    <MenuItem Header="Nhập nhanh: Áp dụng cho danh sách đang lọc"
-                              Command="{Binding ApplyQuickDefaultsToFilteredCommand}" />
-                    <MenuItem Header="Nhập nhanh: Áp dụng cho cùng nhóm"
-                              Command="{Binding ApplyQuickDefaultsToSameGroupCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                    <MenuItem Header="Nhập nhanh: Áp dụng cho cùng loại"
-                              Command="{Binding ApplyQuickDefaultsToSameCategoryCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                    <Separator />
                     <MenuItem Header="Undo (Ctrl+Z)"
                               Command="{Binding UndoCommand}" />
                     <MenuItem Header="Redo (Ctrl+Y)"
@@ -343,10 +278,31 @@
                                     Width="70" />
                 <DataGridTextColumn Header="Chỉ số cũ"
                                     Binding="{Binding PreviousIndex, UpdateSourceTrigger=PropertyChanged}"
+                                    IsReadOnly="True"
                                     Width="100" />
                 <DataGridTextColumn Header="Chỉ số mới"
                                     Binding="{Binding CurrentIndex, UpdateSourceTrigger=PropertyChanged}"
-                                    Width="100" />
+                                    Width="100">
+                    <DataGridTextColumn.CellStyle>
+                        <Style TargetType="{x:Type DataGridCell}">
+                            <Setter Property="Padding" Value="6,2" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                    <Setter Property="Background" Value="#FFFEF3C7" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.CellStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="{x:Type TextBox}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                    <Setter Property="Background" Value="#FFFEF3C7" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
                 <DataGridTextColumn Header="Hệ số"
                                     Binding="{Binding Multiplier, UpdateSourceTrigger=PropertyChanged}"
                                     Visibility="{Binding DataContext.ShowAdvancedColumns, ElementName=CustomerGrid, Converter={StaticResource BoolToVisibility}}"
@@ -370,6 +326,36 @@
                                     Binding="{Binding Amount, StringFormat=N0}"
                                     IsReadOnly="True"
                                     Width="140" />
+                <DataGridTemplateColumn Header="Trạng thái"
+                                        IsReadOnly="True"
+                                        Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="10" Height="10" Margin="0,0,6,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="{x:Type Ellipse}">
+                                            <Setter Property="Fill" Value="#22C55E" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                                    <Setter Property="Fill" Value="#F59E0B" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding HasUsageWarning}" Value="True">
+                                                    <Setter Property="Fill" Value="#F97316" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding HasReadingError}" Value="True">
+                                                    <Setter Property="Fill" Value="#EF4444" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding StatusText}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
                 <DataGridTextColumn Header="Người ghi"
                                      Binding="{Binding PerformedBy, UpdateSourceTrigger=PropertyChanged}"
                                      Width="150" />
@@ -384,7 +370,22 @@
                 Padding="10"
                 Margin="0,8,0,0">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding CustomerCount, StringFormat=Tổng khách: {0}}" />
+                <TextBlock Text="{Binding CustomerCount, StringFormat=Tổng: {0}}" />
+                <TextBlock Text="{Binding CompletedCount, StringFormat=  |  Đã nhập: {0}}"
+                           Margin="16,0,0,0" />
+                <TextBlock Text="{Binding MissingCount, StringFormat=  |  Thiếu: {0}}"
+                           Margin="16,0,0,0" />
+                <TextBlock Text="{Binding WarningCount, StringFormat=  |  Cảnh báo: {0}}"
+                           Margin="16,0,0,0" />
+                <TextBlock Text="{Binding ErrorCount, StringFormat=  |  Lỗi: {0}}"
+                           Margin="16,0,0,0" />
+                <ProgressBar Width="120"
+                             Height="12"
+                             Margin="16,0,0,0"
+                               VerticalAlignment="Center"
+                               Minimum="0"
+                               Maximum="1"
+                              Value="{Binding CompletionRatio, Mode=OneWay}" />
                 <TextBlock Text="{Binding TotalConsumption, StringFormat=  |  Tổng kWh: {0:N0}}"
                            Margin="16,0,0,0" />
                 <TextBlock Text="{Binding TotalChargeableKwh, StringFormat=  |  kWh tính tiền: {0:N0}}"

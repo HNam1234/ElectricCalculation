@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.Windows;
-using System.Windows.Input;
 using ElectricCalculation.Services;
 using ElectricCalculation.ViewModels;
 
@@ -40,16 +39,6 @@ namespace ElectricCalculation.Views
             if (!PromptSnapshotIfNeeded())
             {
                 e.Cancel = true;
-            }
-        }
-
-        private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.F)
-            {
-                SearchTextBox.Focus();
-                SearchTextBox.SelectAll();
-                e.Handled = true;
             }
         }
 

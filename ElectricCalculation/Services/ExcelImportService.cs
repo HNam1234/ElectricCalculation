@@ -310,7 +310,7 @@ namespace ElectricCalculation.Services
                 customer.Substation = (GetMappedString(cells, headerMap, ImportField.Substation, fallbackColumn: "M") ?? string.Empty).Trim();
                 customer.Page = (GetMappedString(cells, headerMap, ImportField.Page, fallbackColumn: "N") ?? string.Empty).Trim();
 
-                customer.CurrentIndex = GetMappedDecimal(cells, headerMap, ImportField.CurrentIndex, fallbackColumn: "O");
+                customer.CurrentIndex = GetMappedNullableDecimal(cells, headerMap, ImportField.CurrentIndex, fallbackColumn: "O");
                 customer.PreviousIndex = GetMappedDecimal(cells, headerMap, ImportField.PreviousIndex, fallbackColumn: "P");
                 customer.Multiplier = GetMappedDecimal(cells, headerMap, ImportField.Multiplier, fallbackColumn: "Q");
                 customer.SubsidizedKwh = GetMappedDecimal(cells, headerMap, ImportField.SubsidizedKwh, fallbackColumn: "S");
@@ -391,6 +391,20 @@ namespace ElectricCalculation.Services
             }
 
             return string.IsNullOrWhiteSpace(fallbackColumn) ? 0 : GetDecimal(cells, fallbackColumn);
+        }
+
+        private static decimal? GetMappedNullableDecimal(
+            IDictionary<string, string?> cells,
+            IDictionary<ImportField, string>? map,
+            ImportField field,
+            string fallbackColumn)
+        {
+            if (map != null && map.TryGetValue(field, out var column) && !string.IsNullOrWhiteSpace(column))
+            {
+                return GetNullableDecimal(cells, column);
+            }
+
+            return string.IsNullOrWhiteSpace(fallbackColumn) ? null : GetNullableDecimal(cells, fallbackColumn);
         }
 
         private static bool TryDetectHeaderMap(IDictionary<string, string?> cells, out Dictionary<ImportField, string> map)
@@ -640,6 +654,22 @@ namespace ElectricCalculation.Services
             }
 
             return 0;
+        }
+
+        private static decimal? GetNullableDecimal(IDictionary<string, string?> cells, string column)
+        {
+            var text = GetString(cells, column);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            if (decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+            {
+                return value;
+            }
+
+            return null;
         }
     }
 }

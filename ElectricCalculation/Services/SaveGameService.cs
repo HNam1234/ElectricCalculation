@@ -43,31 +43,6 @@ namespace ElectricCalculation.Services
             return path;
         }
 
-        public static string? GetLatestSnapshotPath(string? periodLabel = null)
-        {
-            var root = GetSaveRootDirectory();
-            if (!Directory.Exists(root))
-            {
-                return null;
-            }
-
-            IEnumerable<string> folders = Directory.EnumerateDirectories(root);
-            if (!string.IsNullOrWhiteSpace(periodLabel))
-            {
-                var safePeriod = MakeSafeFileName(periodLabel);
-                var periodFolder = Path.Combine(root, safePeriod);
-                folders = Directory.Exists(periodFolder) ? new[] { periodFolder } : Array.Empty<string>();
-            }
-
-            var candidates = folders
-                .SelectMany(dir => Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly))
-                .Select(path => new FileInfo(path))
-                .OrderByDescending(f => f.LastWriteTimeUtc)
-                .ToList();
-
-            return candidates.FirstOrDefault()?.FullName;
-        }
-
         public static IReadOnlyList<SnapshotInfo> ListSnapshots(int maxCount = 50)
         {
             var root = GetSaveRootDirectory();

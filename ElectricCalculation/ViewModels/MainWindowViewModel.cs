@@ -44,31 +44,6 @@ namespace ElectricCalculation.ViewModels
         [ObservableProperty]
         private string invoiceIssuer = string.Empty;
 
-        // Quick defaults (UI shortcut for AppSettings).
-        [ObservableProperty]
-        private bool isQuickDefaultsExpanded;
-
-        [ObservableProperty]
-        private string quickDefaultUnitPrice = "0";
-
-        [ObservableProperty]
-        private string quickDefaultMultiplier = "1";
-
-        [ObservableProperty]
-        private string quickDefaultSubsidizedKwh = "0";
-
-        [ObservableProperty]
-        private string quickDefaultPerformedBy = string.Empty;
-
-        [ObservableProperty]
-        private bool quickApplyDefaultsOnNewRow = true;
-
-        [ObservableProperty]
-        private bool quickApplyDefaultsOnImport = true;
-
-        [ObservableProperty]
-        private string quickDefaultsErrorMessage = string.Empty;
-
         [ObservableProperty]
         private bool isDirty;
 
@@ -130,7 +105,6 @@ namespace ElectricCalculation.ViewModels
             _suppressDirty = true;
             _ui = new UiService();
             _settings = AppSettingsService.Load();
-            LoadQuickDefaultsFromSettings();
 
             _undoRedo.StateChanged += (_, _) =>
             {
@@ -150,18 +124,6 @@ namespace ElectricCalculation.ViewModels
             PeriodLabel = $"Tháng {DateTime.Now.Month:00}/{DateTime.Now.Year}";
             IsDirty = false;
             _suppressDirty = false;
-        }
-
-        private void LoadQuickDefaultsFromSettings()
-        {
-            var s = _settings ?? new AppSettings();
-            QuickDefaultUnitPrice = s.DefaultUnitPrice.ToString("0.##", CultureInfo.CurrentCulture);
-            QuickDefaultMultiplier = s.DefaultMultiplier.ToString("0.##", CultureInfo.CurrentCulture);
-            QuickDefaultSubsidizedKwh = s.DefaultSubsidizedKwh.ToString("0.##", CultureInfo.CurrentCulture);
-            QuickDefaultPerformedBy = s.DefaultPerformedBy ?? string.Empty;
-            QuickApplyDefaultsOnNewRow = s.ApplyDefaultsOnNewRow;
-            QuickApplyDefaultsOnImport = s.ApplyDefaultsOnImport;
-            QuickDefaultsErrorMessage = string.Empty;
         }
 
         public void ImportFromExcelFile(string filePath)
@@ -228,6 +190,7 @@ namespace ElectricCalculation.ViewModels
                 CurrentDataFilePath = setCurrentDataFilePath ? filePath : null;
                 LoadedSnapshotPath = null;
                 IsDirty = false;
+                RefreshUsageAverages();
             }
             finally
             {
@@ -239,6 +202,33 @@ namespace ElectricCalculation.ViewModels
         {
             LoadDataFile(filePath, setCurrentDataFilePath: false);
             LoadedSnapshotPath = filePath;
+        }
+
+        private void RefreshUsageAverages()
+        {
+            var wasSuppressDirty = _suppressDirty;
+            _suppressDirty = true;
+
+            try
+            {
+                var averages = UsageHistoryService.BuildAverageConsumptionByMeterKey(
+                    currentPeriodLabel: PeriodLabel,
+                    currentCustomers: Customers,
+                    periodsToAverage: 3,
+                    excludeSnapshotPath: LoadedSnapshotPath);
+
+                foreach (var customer in Customers)
+                {
+                    var key = UsageHistoryService.BuildMeterKey(customer);
+                    customer.AverageConsumption3Periods = averages.TryGetValue(key, out var avg) ? avg : null;
+                }
+            }
+            finally
+            {
+                _suppressDirty = wasSuppressDirty;
+            }
+
+            NotifySummaryChanged();
         }
 
         [RelayCommand]
@@ -280,13 +270,88 @@ namespace ElectricCalculation.ViewModels
         }
 
         // Totals for the current (filtered) view.
-        public int CustomerCount => CustomersView.Cast<Customer>().Count();
+        private IReadOnlyList<Customer> TryGetViewCustomersSnapshot()
+        {
+            try
+            {
+                if (CustomersView == null)
+                {
+                    return TryGetCustomersSnapshot();
+                }
 
-        public decimal TotalConsumption => CustomersView.Cast<Customer>().Sum(c => c.Consumption);
+                return CustomersView
+                    .Cast<object>()
+                    .OfType<Customer>()
+                    .ToList();
+            }
+            catch
+            {
+                return TryGetCustomersSnapshot();
+            }
+        }
 
-        public decimal TotalChargeableKwh => CustomersView.Cast<Customer>().Sum(c => c.ChargeableKwh);
+        private IReadOnlyList<Customer> TryGetCustomersSnapshot()
+        {
+            try
+            {
+                return Customers.ToList();
+            }
+            catch
+            {
+                return Array.Empty<Customer>();
+            }
+        }
 
-        public decimal TotalAmount => CustomersView.Cast<Customer>().Sum(c => c.Amount);
+        public int CustomerCount => TryGetViewCustomersSnapshot().Count;
+
+        public decimal TotalConsumption => TryGetViewCustomersSnapshot().Sum(c => c.Consumption);
+
+        public decimal TotalChargeableKwh => TryGetViewCustomersSnapshot().Sum(c => c.ChargeableKwh);
+
+        public decimal TotalAmount => TryGetViewCustomersSnapshot().Sum(c => c.Amount);
+
+        public int CompletedCount => TryGetViewCustomersSnapshot().Count(c => c.CurrentIndex != null);
+
+        public int MissingCount => TryGetViewCustomersSnapshot().Count(c => c.IsMissingReading);
+
+        public int WarningCount => TryGetViewCustomersSnapshot().Count(c => c.HasUsageWarning);
+
+        public int ErrorCount => TryGetViewCustomersSnapshot().Count(c => c.HasReadingError);
+
+        public double CompletionRatio
+        {
+            get
+            {
+                var customers = TryGetViewCustomersSnapshot();
+                if (customers.Count <= 0)
+                {
+                    return 0;
+                }
+
+                var completed = customers.Count(c => c.CurrentIndex != null);
+                var ratio = (double)completed / customers.Count;
+
+                if (double.IsNaN(ratio) || double.IsInfinity(ratio))
+                {
+                    return 0;
+                }
+
+                return Math.Max(0, Math.Min(1, ratio));
+            }
+        }
+
+        private void NotifySummaryChanged()
+        {
+            OnPropertyChanged(nameof(CustomerCount));
+            OnPropertyChanged(nameof(CompletedCount));
+            OnPropertyChanged(nameof(MissingCount));
+            OnPropertyChanged(nameof(WarningCount));
+            OnPropertyChanged(nameof(ErrorCount));
+            OnPropertyChanged(nameof(CompletionRatio));
+            OnPropertyChanged(nameof(TotalConsumption));
+            OnPropertyChanged(nameof(TotalChargeableKwh));
+            OnPropertyChanged(nameof(TotalAmount));
+        }
 
         [RelayCommand]
         private void ImportFromExcel(string filePath)
@@ -328,6 +393,8 @@ namespace ElectricCalculation.ViewModels
             {
                 IsDirty = true;
             }
+
+            RefreshUsageAverages();
         }
 
         [RelayCommand]
@@ -395,70 +462,6 @@ namespace ElectricCalculation.ViewModels
                     customer.PerformedBy = s.DefaultPerformedBy;
                 }
             }
-        }
-
-        [RelayCommand]
-        private void ToggleQuickDefaults()
-        {
-            IsQuickDefaultsExpanded = !IsQuickDefaultsExpanded;
-        }
-
-        [RelayCommand]
-        private void ApplyQuickDefaultsToSelected(IList? selectedItems)
-        {
-            if (!TryBuildSettingsFromQuickDefaults(out var updated))
-            {
-                return;
-            }
-
-            var targets = selectedItems?.OfType<Customer>().ToList();
-            if (targets == null || targets.Count == 0)
-            {
-                _ui.ShowMessage("Nhập nhanh", "Hãy chọn 1 hoặc nhiều dòng để áp dụng.");
-                return;
-            }
-
-            var actions = new List<IUndoableAction>();
-            foreach (var customer in targets)
-            {
-                actions.AddRange(BuildDefaultsActions(customer, updated));
-            }
-
-            if (actions.Count == 0)
-            {
-                return;
-            }
-
-            ExecuteUndoable(new CompositeUndoableAction("Nhập nhanh (dòng chọn)", actions));
-        }
-
-        [RelayCommand]
-        private void ApplyQuickDefaultsToFiltered()
-        {
-            if (!TryBuildSettingsFromQuickDefaults(out var updated))
-            {
-                return;
-            }
-
-            var targets = CustomersView.Cast<Customer>().ToList();
-            if (targets.Count == 0)
-            {
-                _ui.ShowMessage("Nhập nhanh", "Không có dữ liệu trong danh sách đang lọc để áp dụng.");
-                return;
-            }
-
-            var actions = new List<IUndoableAction>();
-            foreach (var customer in targets)
-            {
-                actions.AddRange(BuildDefaultsActions(customer, updated));
-            }
-
-            if (actions.Count == 0)
-            {
-                return;
-            }
-
-            ExecuteUndoable(new CompositeUndoableAction("Nhập nhanh (đang lọc)", actions));
         }
 
         [RelayCommand]
@@ -657,84 +660,6 @@ namespace ElectricCalculation.ViewModels
             ExecuteUndoable(action);
         }
 
-        [RelayCommand]
-        private void ApplyQuickDefaultsToSameGroup(Customer? reference)
-        {
-            if (reference == null)
-            {
-                return;
-            }
-
-            var group = reference.GroupName?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(group))
-            {
-                return;
-            }
-
-            if (!TryBuildSettingsFromQuickDefaults(out var updated))
-            {
-                return;
-            }
-
-            var targets = Customers.Where(c => string.Equals(c.GroupName, group, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (targets.Count == 0)
-            {
-                return;
-            }
-
-            var actions = new List<IUndoableAction>();
-            foreach (var c in targets)
-            {
-                actions.AddRange(BuildDefaultsActions(c, updated));
-            }
-
-            if (actions.Count == 0)
-            {
-                return;
-            }
-
-            ExecuteUndoable(new CompositeUndoableAction("Nhập nhanh theo nhóm", actions));
-        }
-
-        [RelayCommand]
-        private void ApplyQuickDefaultsToSameCategory(Customer? reference)
-        {
-            if (reference == null)
-            {
-                return;
-            }
-
-            var category = reference.Category?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(category))
-            {
-                return;
-            }
-
-            if (!TryBuildSettingsFromQuickDefaults(out var updated))
-            {
-                return;
-            }
-
-            var targets = Customers.Where(c => string.Equals(c.Category, category, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (targets.Count == 0)
-            {
-                return;
-            }
-
-            var actions = new List<IUndoableAction>();
-            foreach (var c in targets)
-            {
-                actions.AddRange(BuildDefaultsActions(c, updated));
-            }
-
-            if (actions.Count == 0)
-            {
-                return;
-            }
-
-            ExecuteUndoable(new CompositeUndoableAction("Nhập nhanh theo loại", actions));
-        }
-
         private void ExecuteUndoable(IUndoableAction action)
         {
             _undoRedo.Execute(action);
@@ -763,55 +688,6 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
-        private static IReadOnlyList<IUndoableAction> BuildDefaultsActions(Customer customer, AppSettings settings)
-        {
-            var actions = new List<IUndoableAction>();
-
-            if (settings.DefaultUnitPrice > 0 && customer.UnitPrice != settings.DefaultUnitPrice)
-            {
-                var before = customer.UnitPrice;
-                var after = settings.DefaultUnitPrice;
-                actions.Add(new DelegateUndoableAction("Đơn giá", () => customer.UnitPrice = before, () => customer.UnitPrice = after));
-            }
-
-            var multiplier = settings.DefaultMultiplier > 0 ? settings.DefaultMultiplier : 1m;
-            if (customer.Multiplier != multiplier)
-            {
-                var before = customer.Multiplier;
-                var after = multiplier;
-                actions.Add(new DelegateUndoableAction("Hệ số", () => customer.Multiplier = before, () => customer.Multiplier = after));
-            }
-
-            if (settings.DefaultSubsidizedKwh > 0)
-            {
-                if (customer.SubsidizedKwh != settings.DefaultSubsidizedKwh)
-                {
-                    var beforeKwh = customer.SubsidizedKwh;
-                    var afterKwh = settings.DefaultSubsidizedKwh;
-                    actions.Add(new DelegateUndoableAction(
-                        "Bao cấp (kWh)",
-                        () =>
-                        {
-                            customer.SubsidizedKwh = beforeKwh;
-                        },
-                        () =>
-                        {
-                            customer.SubsidizedKwh = afterKwh;
-                        }));
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(settings.DefaultPerformedBy) &&
-                !string.Equals(customer.PerformedBy, settings.DefaultPerformedBy, StringComparison.Ordinal))
-            {
-                var before = customer.PerformedBy ?? string.Empty;
-                var after = settings.DefaultPerformedBy;
-                actions.Add(new DelegateUndoableAction("Người ghi", () => customer.PerformedBy = before, () => customer.PerformedBy = after));
-            }
-
-            return actions;
-        }
-
         private static bool TryGetWritableCustomerProperty(string propertyName, out PropertyInfo property)
         {
             property = null!;
@@ -834,7 +710,8 @@ namespace ElectricCalculation.ViewModels
         private static bool TryConvertText(string text, Type targetType, out object? value)
         {
             value = null;
-            var t = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            var underlyingType = Nullable.GetUnderlyingType(targetType);
+            var t = underlyingType ?? targetType;
 
             if (t == typeof(string))
             {
@@ -844,6 +721,12 @@ namespace ElectricCalculation.ViewModels
 
             if (string.IsNullOrWhiteSpace(text))
             {
+                if (underlyingType != null)
+                {
+                    value = null;
+                    return true;
+                }
+
                 value = t == typeof(decimal) ? 0m : t == typeof(int) ? 0 : Activator.CreateInstance(t);
                 return true;
             }
@@ -907,62 +790,6 @@ namespace ElectricCalculation.ViewModels
             }
 
             return result;
-        }
-
-        private bool TryBuildSettingsFromQuickDefaults(out AppSettings settings)
-        {
-            settings = _settings ?? new AppSettings();
-            QuickDefaultsErrorMessage = string.Empty;
-
-            if (!TryParseDecimal(QuickDefaultUnitPrice, out var unitPrice) ||
-                !TryParseDecimal(QuickDefaultMultiplier, out var multiplier) ||
-                !TryParseDecimal(QuickDefaultSubsidizedKwh, out var subsidizedKwh))
-            {
-                return false;
-            }
-
-            if (multiplier <= 0)
-            {
-                multiplier = 1;
-            }
-
-            settings = new AppSettings
-            {
-                DefaultUnitPrice = unitPrice,
-                DefaultMultiplier = multiplier,
-                DefaultSubsidizedKwh = subsidizedKwh,
-                DefaultPerformedBy = QuickDefaultPerformedBy ?? string.Empty,
-                ApplyDefaultsOnNewRow = QuickApplyDefaultsOnNewRow,
-                ApplyDefaultsOnImport = QuickApplyDefaultsOnImport,
-                OverrideExistingValues = true
-            };
-
-            return true;
-        }
-
-        private bool TryParseDecimal(string? text, out decimal value)
-        {
-            value = 0m;
-
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return true;
-            }
-
-            if (!decimal.TryParse(text, NumberStyles.Any, CultureInfo.CurrentCulture, out value) &&
-                !decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
-            {
-                QuickDefaultsErrorMessage = $"Không đọc được giá trị: '{text}'.";
-                return false;
-            }
-
-            if (value < 0)
-            {
-                QuickDefaultsErrorMessage = "Giá trị phải >= 0.";
-                return false;
-            }
-
-            return true;
         }
 
 
@@ -1185,7 +1012,50 @@ namespace ElectricCalculation.ViewModels
         [RelayCommand]
         private void NewPeriodWithDialog()
         {
-            var vm = _ui.ShowNewPeriodDialog();
+            var referenceOptions = new List<NewPeriodViewModel.ReferenceDatasetOption>();
+
+            if (Customers.Count > 0)
+            {
+                referenceOptions.Add(new NewPeriodViewModel.ReferenceDatasetOption(
+                    PeriodLabel,
+                    $"Đang mở: {PeriodLabel}",
+                    SnapshotPath: null,
+                    IsCurrentDataset: true));
+            }
+
+            var snapshots = SaveGameService.ListSnapshots(maxCount: 200)
+                .GroupBy(s => s.PeriodLabel)
+                .Select(g => g.OrderByDescending(x => x.SavedAt).First())
+                .OrderByDescending(s => s.SavedAt)
+                .ToList();
+
+            foreach (var snapshot in snapshots)
+            {
+                var namePart = string.IsNullOrWhiteSpace(snapshot.SnapshotName) ? string.Empty : $" - {snapshot.SnapshotName}";
+                var display = $"{snapshot.PeriodLabel}{namePart} ({snapshot.SavedAt:dd/MM/yyyy HH:mm})";
+
+                referenceOptions.Add(new NewPeriodViewModel.ReferenceDatasetOption(
+                    snapshot.PeriodLabel,
+                    display,
+                    snapshot.Path,
+                    IsCurrentDataset: false));
+            }
+
+            if (referenceOptions.Count == 0)
+            {
+                _ui.ShowMessage("Làm tháng mới", "Không có bộ dữ liệu để chọn làm tháng cũ. Hãy mở hoặc lưu snapshot trước.");
+                return;
+            }
+
+            var dialogVm = new NewPeriodViewModel(referenceOptions);
+
+            if (TryGetNextPeriod(referenceOptions[0].PeriodLabel, out var nextMonth, out var nextYear))
+            {
+                dialogVm.Month = nextMonth;
+                dialogVm.Year = nextYear;
+            }
+
+            var vm = _ui.ShowNewPeriodDialog(dialogVm);
             if (vm == null)
             {
                 return;
@@ -1197,23 +1067,46 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
-            var newCustomers = vm.CopyCustomers
-                ? Customers.OrderBy(c => c.SequenceNumber).Select(CloneCustomer).ToList()
-                : new List<Customer>();
-
-            if (vm.CopyCustomers)
+            if (vm.SelectedReferenceDataset == null)
             {
-                foreach (var c in newCustomers)
-                {
-                    if (vm.MoveCurrentToPrevious)
-                    {
-                        c.PreviousIndex = c.CurrentIndex;
-                    }
+                _ui.ShowMessage("Làm tháng mới", "Hãy chọn bộ dữ liệu làm tháng cũ.");
+                return;
+            }
 
-                    if (vm.ResetCurrentToZero)
-                    {
-                        c.CurrentIndex = 0;
-                    }
+            IReadOnlyList<Customer> sourceCustomers;
+
+            if (vm.SelectedReferenceDataset.IsCurrentDataset)
+            {
+                sourceCustomers = Customers.ToList();
+            }
+            else
+            {
+                var snapshotPath = vm.SelectedReferenceDataset.SnapshotPath;
+                if (string.IsNullOrWhiteSpace(snapshotPath) || !File.Exists(snapshotPath))
+                {
+                    _ui.ShowMessage("Làm tháng mới", "Không tìm thấy file bộ dữ liệu tháng cũ.");
+                    return;
+                }
+
+                var loaded = ProjectFileService.Load(snapshotPath);
+                sourceCustomers = loaded.Customers;
+            }
+
+            var newCustomers = sourceCustomers
+                .OrderBy(c => c.SequenceNumber)
+                .Select(CloneCustomer)
+                .ToList();
+
+            foreach (var c in newCustomers)
+            {
+                if (vm.MoveCurrentToPrevious)
+                {
+                    c.PreviousIndex = c.CurrentIndex ?? c.PreviousIndex;
+                }
+
+                if (vm.ResetCurrentToZero)
+                {
+                    c.CurrentIndex = null;
                 }
             }
 
@@ -1226,6 +1119,43 @@ namespace ElectricCalculation.ViewModels
             SelectedCustomer = null;
             PeriodLabel = vm.PeriodLabel;
             CurrentDataFilePath = null;
+            LoadedSnapshotPath = null;
+            RefreshUsageAverages();
+        }
+
+        private static bool TryGetNextPeriod(string? periodLabel, out int month, out int year)
+        {
+            month = 0;
+            year = 0;
+
+            if (string.IsNullOrWhiteSpace(periodLabel))
+            {
+                return false;
+            }
+
+            var parts = periodLabel.Split('/');
+            if (parts.Length < 2)
+            {
+                return false;
+            }
+
+            var monthText = new string(parts[0].Where(char.IsDigit).ToArray());
+            var yearText = new string(parts[1].Where(char.IsDigit).ToArray());
+
+            if (!int.TryParse(monthText, out var m) || !int.TryParse(yearText, out var y))
+            {
+                return false;
+            }
+
+            if (m is < 1 or > 12 || y < 2000)
+            {
+                return false;
+            }
+
+            var next = new DateTime(y, m, 1).AddMonths(1);
+            month = next.Month;
+            year = next.Year;
+            return true;
         }
 
         [RelayCommand]
@@ -1579,26 +1509,26 @@ namespace ElectricCalculation.ViewModels
                 }
             }
 
-            OnPropertyChanged(nameof(CustomerCount));
-            OnPropertyChanged(nameof(TotalConsumption));
-            OnPropertyChanged(nameof(TotalChargeableKwh));
-            OnPropertyChanged(nameof(TotalAmount));
+            NotifySummaryChanged();
         }
 
         private void Customer_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (!_suppressDirty)
+            if (_suppressDirty)
             {
-                IsDirty = true;
+                return;
             }
+
+            IsDirty = true;
 
             if (e.PropertyName == nameof(Customer.Consumption) ||
                 e.PropertyName == nameof(Customer.ChargeableKwh) ||
-                e.PropertyName == nameof(Customer.Amount))
+                e.PropertyName == nameof(Customer.Amount) ||
+                e.PropertyName == nameof(Customer.IsMissingReading) ||
+                e.PropertyName == nameof(Customer.HasReadingError) ||
+                e.PropertyName == nameof(Customer.HasUsageWarning))
             {
-                OnPropertyChanged(nameof(TotalConsumption));
-                OnPropertyChanged(nameof(TotalChargeableKwh));
-                OnPropertyChanged(nameof(TotalAmount));
+                NotifySummaryChanged();
             }
         }
 
@@ -1616,6 +1546,18 @@ namespace ElectricCalculation.ViewModels
 
             var keyword = SearchText.Trim();
 
+            static bool ContainsKeyword(string? value, string keyword) =>
+                !string.IsNullOrWhiteSpace(value) &&
+                value.IndexOf(keyword, StringComparison.CurrentCultureIgnoreCase) >= 0;
+
+            // Fast search always includes the primary fields: name + meter + location.
+            if (ContainsKeyword(customer.Name, keyword) ||
+                ContainsKeyword(customer.MeterNumber, keyword) ||
+                ContainsKeyword(customer.Location, keyword))
+            {
+                return true;
+            }
+
             string fieldValue = SelectedSearchField switch
             {
                 "Nhóm / Đơn vị" => customer.GroupName ?? string.Empty,
@@ -1626,25 +1568,19 @@ namespace ElectricCalculation.ViewModels
                 _ => customer.Name ?? string.Empty // Tên khách
             };
 
-            return fieldValue.IndexOf(keyword, StringComparison.CurrentCultureIgnoreCase) >= 0;
+            return ContainsKeyword(fieldValue, keyword);
         }
 
         partial void OnSearchTextChanged(string value)
         {
             CustomersView.Refresh();
-            OnPropertyChanged(nameof(CustomerCount));
-            OnPropertyChanged(nameof(TotalConsumption));
-            OnPropertyChanged(nameof(TotalChargeableKwh));
-            OnPropertyChanged(nameof(TotalAmount));
+            NotifySummaryChanged();
         }
 
         partial void OnSelectedSearchFieldChanged(string value)
         {
             CustomersView.Refresh();
-            OnPropertyChanged(nameof(CustomerCount));
-            OnPropertyChanged(nameof(TotalConsumption));
-            OnPropertyChanged(nameof(TotalChargeableKwh));
-            OnPropertyChanged(nameof(TotalAmount));
+            NotifySummaryChanged();
         }
 
         partial void OnPeriodLabelChanged(string value)

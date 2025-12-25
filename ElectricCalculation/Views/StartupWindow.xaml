@@ -232,30 +232,6 @@
         <!-- Left: Actions -->
         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
             <Button Style="{StaticResource ActionCardButtonStyle}"
-                    Command="{Binding ContinueLatestSnapshotCommand}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Border Style="{StaticResource IconBadgeStyle}">
-                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE768;" />
-                    </Border>
-                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                        <TextBlock Text="Tiếp tục (bộ dữ liệu mới nhất)"
-                                   Foreground="{StaticResource TextPrimary}"
-                                   FontSize="14"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Mở nhanh bản lưu gần nhất để chỉnh sửa."
-                                   Foreground="{StaticResource TextSecondary}"
-                                   FontSize="12"
-                                   Margin="0,4,0,0"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Grid>
-            </Button>
-
-            <Button Style="{StaticResource ActionCardButtonStyle}"
                     Command="{Binding NewSessionCommand}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -271,6 +247,30 @@
                                    FontSize="14"
                                    FontWeight="SemiBold" />
                         <TextBlock Text="Tạo bộ dữ liệu trống để nhập tay."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Style="{StaticResource ActionCardButtonStyle}"
+                    Command="{Binding CreateNewPeriodFromDatasetCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE787;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Tạo tháng mới (từ bộ dữ liệu)"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Chọn bộ dữ liệu tháng cũ và tạo tháng mới để nhập chỉ số."
                                    Foreground="{StaticResource TextSecondary}"
                                    FontSize="12"
                                    Margin="0,4,0,0"

@@ -827,13 +827,19 @@ namespace ElectricCalculation.Services
                     new XElement(ns + "t", text)));
         }
 
-        private static XElement CreateNumberCell(XNamespace ns, string column, int rowIndex, decimal value)
+        private static XElement CreateNumberCell(XNamespace ns, string column, int rowIndex, decimal? value)
         {
             var cellReference = column + rowIndex.ToString(CultureInfo.InvariantCulture);
 
-            return new XElement(ns + "c",
-                new XAttribute("r", cellReference),
-                new XElement(ns + "v", value.ToString(CultureInfo.InvariantCulture)));
+            var cell = new XElement(ns + "c",
+                new XAttribute("r", cellReference));
+
+            if (value != null)
+            {
+                cell.Add(new XElement(ns + "v", value.Value.ToString(CultureInfo.InvariantCulture)));
+            }
+
+            return cell;
         }
 
         private static XElement CreateNumberCell(XNamespace ns, string column, int rowIndex, int value)

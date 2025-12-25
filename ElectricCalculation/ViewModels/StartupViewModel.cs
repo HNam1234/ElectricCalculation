@@ -91,6 +91,8 @@ namespace ElectricCalculation.ViewModels
                     SelectedSnapshot = RecentSnapshots.FirstOrDefault(i =>
                         string.Equals(i.Path, keepSelectedPath, StringComparison.OrdinalIgnoreCase));
                 }
+
+                CreateNewPeriodFromDatasetCommand.NotifyCanExecuteChanged();
             }
             catch (Exception ex)
             {
@@ -102,6 +104,182 @@ namespace ElectricCalculation.ViewModels
         private void NewSession()
         {
             OpenEditorWindow(init: null);
+        }
+
+        private bool CanCreateNewPeriodFromDataset() => RecentSnapshots.Count > 0;
+
+        [RelayCommand(CanExecute = nameof(CanCreateNewPeriodFromDataset))]
+        private void CreateNewPeriodFromDataset()
+        {
+            try
+            {
+                RefreshSnapshots();
+
+                var snapshots = SaveGameService.ListSnapshots(maxCount: 200);
+                if (snapshots.Count == 0)
+                {
+                    throw new WarningException("Không có bộ dữ liệu để tạo tháng mới.");
+                }
+
+                var pins = PinnedDatasetService.LoadPins();
+
+                var ordered = snapshots
+                    .Select(s =>
+                    {
+                        var isPinned = pins.TryGetValue(s.Path, out var pinnedAtUtc);
+                        return new
+                        {
+                            Snapshot = s,
+                            IsPinned = isPinned,
+                            PinnedAtUtc = isPinned ? pinnedAtUtc : (DateTime?)null
+                        };
+                    })
+                    .OrderByDescending(x => x.IsPinned)
+                    .ThenByDescending(x => x.PinnedAtUtc ?? DateTime.MinValue)
+                    .ThenByDescending(x => x.Snapshot.SavedAt)
+                    .ToList();
+
+                var referenceOptions = ordered
+                    .Select(x =>
+                    {
+                        var period = string.IsNullOrWhiteSpace(x.Snapshot.PeriodLabel)
+                            ? "(Unknown period)"
+                            : x.Snapshot.PeriodLabel;
+
+                        var title = string.IsNullOrWhiteSpace(x.Snapshot.SnapshotName)
+                            ? period
+                            : $"{period} - {x.Snapshot.SnapshotName}";
+
+                        var pinPrefix = x.IsPinned ? "[PIN] " : string.Empty;
+                        var displayName = $"{pinPrefix}{title} ({x.Snapshot.SavedAt:dd/MM/yyyy HH:mm})";
+
+                        return new NewPeriodViewModel.ReferenceDatasetOption(
+                            PeriodLabel: period,
+                            DisplayName: displayName,
+                            SnapshotPath: x.Snapshot.Path,
+                            IsCurrentDataset: false);
+                    })
+                    .ToList();
+
+                var dialogVm = new NewPeriodViewModel(referenceOptions);
+
+                var defaultPath = SelectedSnapshot?.Path
+                    ?? RecentSnapshots.FirstOrDefault(i => !i.IsPinned)?.Path
+                    ?? RecentSnapshots.FirstOrDefault()?.Path;
+
+                if (!string.IsNullOrWhiteSpace(defaultPath))
+                {
+                    dialogVm.SelectedReferenceDataset = dialogVm.ReferenceDatasets.FirstOrDefault(o =>
+                        string.Equals(o.SnapshotPath, defaultPath, StringComparison.OrdinalIgnoreCase))
+                        ?? dialogVm.ReferenceDatasets.FirstOrDefault();
+                }
+
+                if (TryGetNextPeriod(dialogVm.SelectedReferenceDataset?.PeriodLabel, out var nextMonth, out var nextYear))
+                {
+                    dialogVm.Month = nextMonth;
+                    dialogVm.Year = nextYear;
+                }
+
+                var vm = _ui.ShowNewPeriodDialog(dialogVm);
+                if (vm == null)
+                {
+                    return;
+                }
+
+                var reference = vm.SelectedReferenceDataset;
+                var snapshotPath = reference?.SnapshotPath;
+                if (string.IsNullOrWhiteSpace(snapshotPath))
+                {
+                    throw new WarningException("Bộ dữ liệu tháng cũ không hợp lệ.");
+                }
+
+                var (_, customers) = ProjectFileService.Load(snapshotPath);
+                customers = customers
+                    .OrderBy(c => c.SequenceNumber)
+                    .ToList();
+
+                foreach (var customer in customers)
+                {
+                    if (vm.MoveCurrentToPrevious)
+                    {
+                        customer.PreviousIndex = customer.CurrentIndex ?? customer.PreviousIndex;
+                    }
+
+                    if (vm.ResetCurrentToZero)
+                    {
+                        customer.CurrentIndex = null;
+                    }
+                }
+
+                var periodLabel = vm.PeriodLabel;
+
+                OpenEditorWindow(editor =>
+                {
+                    var tempPath = Path.Combine(
+                        Path.GetTempPath(),
+                        $"ElectricCalculation_NewPeriod_{Guid.NewGuid():N}.json");
+
+                    try
+                    {
+                        ProjectFileService.Save(tempPath, periodLabel, customers);
+                        editor.LoadDataFile(tempPath, setCurrentDataFilePath: false);
+                        editor.IsDirty = true;
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            if (File.Exists(tempPath))
+                            {
+                                File.Delete(tempPath);
+                            }
+                        }
+                        catch
+                        {
+                            // Best-effort cleanup.
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                HandleRequestError(ex);
+            }
+        }
+
+        private static bool TryGetNextPeriod(string? periodLabel, out int month, out int year)
+        {
+            month = 0;
+            year = 0;
+
+            if (string.IsNullOrWhiteSpace(periodLabel))
+            {
+                return false;
+            }
+
+            var parts = periodLabel.Split('/');
+            if (parts.Length < 2)
+            {
+                return false;
+            }
+
+            var monthText = new string(parts[0].Where(char.IsDigit).ToArray());
+            var yearText = new string(parts[1].Where(char.IsDigit).ToArray());
+
+            if (!int.TryParse(monthText, out var m) || !int.TryParse(yearText, out var y))
+            {
+                return false;
+            }
+
+            if (m is < 1 or > 12 || y < 2000)
+            {
+                return false;
+            }
+
+            var next = new DateTime(y, m, 1).AddMonths(1);
+            month = next.Month;
+            year = next.Year;
+            return true;
         }
 
         [RelayCommand]
@@ -135,31 +313,6 @@ namespace ElectricCalculation.ViewModels
 
                 editor.LoadDataFile(filePath, setCurrentDataFilePath: true);
             });
-        }
-
-        [RelayCommand]
-        private void ContinueLatestSnapshot()
-        {
-            try
-            {
-                // Prefer the newest item in the current list (top snapshot section),
-                // so the "continue" action matches what users see on Startup.
-                RefreshSnapshots();
-
-                var latest = RecentSnapshots.FirstOrDefault(i => !i.IsPinned)?.Path
-                    ?? RecentSnapshots.FirstOrDefault()?.Path;
-
-                if (string.IsNullOrWhiteSpace(latest))
-                {
-                    throw new WarningException("No snapshot to continue.");
-                }
-
-                OpenEditorWindow(editor => editor.LoadSnapshotFile(latest));
-            }
-            catch (Exception ex)
-            {
-                HandleRequestError(ex);
-            }
         }
 
         [RelayCommand]
