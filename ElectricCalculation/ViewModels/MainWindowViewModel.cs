@@ -51,7 +51,15 @@ namespace ElectricCalculation.ViewModels
         private string? loadedSnapshotPath;
 
         [ObservableProperty]
-        private bool showAdvancedColumns;
+        [NotifyPropertyChangedFor(nameof(IsDetailMode))]
+        private bool isFastEntryMode = true;
+
+        [ObservableProperty]
+        private bool isRouteEntryMode = true;
+
+        public bool IsDetailMode => !IsFastEntryMode;
+
+        public string RouteEntryProgressText => BuildRouteEntryProgressText();
 
         public ObservableCollection<Customer> Customers { get; } = new();
 
@@ -115,6 +123,7 @@ namespace ElectricCalculation.ViewModels
             CustomersView = CollectionViewSource.GetDefaultView(Customers);
             CustomersView.Filter = FilterCustomer;
             Customers.CollectionChanged += Customers_CollectionChanged;
+            ApplyRouteEntrySort();
 
             if (SearchFields.Count > 0)
             {
@@ -351,6 +360,63 @@ namespace ElectricCalculation.ViewModels
             OnPropertyChanged(nameof(TotalConsumption));
             OnPropertyChanged(nameof(TotalChargeableKwh));
             OnPropertyChanged(nameof(TotalAmount));
+        }
+
+        private void NotifyRouteEntryProgressChanged()
+        {
+            OnPropertyChanged(nameof(RouteEntryProgressText));
+        }
+
+        private string BuildRouteEntryProgressText()
+        {
+            if (!IsRouteEntryMode)
+            {
+                return string.Empty;
+            }
+
+            var current = SelectedCustomer;
+            if (current == null)
+            {
+                return string.Empty;
+            }
+
+            var locationRaw = current.Location ?? string.Empty;
+            var locationDisplay = string.IsNullOrWhiteSpace(locationRaw) ? "(Chưa có vị trí)" : locationRaw.Trim();
+
+            var customers = TryGetViewCustomersSnapshot();
+            if (customers.Count == 0)
+            {
+                return $"Đang nhập: {locationDisplay}";
+            }
+
+            var locationKey = locationRaw.Trim();
+            var group = customers
+                .Where(c => string.Equals((c.Location ?? string.Empty).Trim(), locationKey, StringComparison.CurrentCultureIgnoreCase))
+                .ToList();
+
+            if (group.Count == 0)
+            {
+                return $"Đang nhập: {locationDisplay}";
+            }
+
+            var index = group.FindIndex(c => ReferenceEquals(c, current));
+            if (index < 0)
+            {
+                index = 0;
+            }
+
+            return $"Đang nhập: {locationDisplay} ({index + 1}/{group.Count})";
+        }
+
+        private void ApplyRouteEntrySort()
+        {
+            if (CustomersView is not ListCollectionView view)
+            {
+                return;
+            }
+
+            view.CustomSort = IsRouteEntryMode ? CustomerRouteComparer.Instance : null;
+            CustomersView.Refresh();
         }
 
         [RelayCommand]
@@ -1510,6 +1576,7 @@ namespace ElectricCalculation.ViewModels
             }
 
             NotifySummaryChanged();
+            NotifyRouteEntryProgressChanged();
         }
 
         private void Customer_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1529,6 +1596,15 @@ namespace ElectricCalculation.ViewModels
                 e.PropertyName == nameof(Customer.HasUsageWarning))
             {
                 NotifySummaryChanged();
+            }
+
+            if (IsRouteEntryMode &&
+                (e.PropertyName == nameof(Customer.Location) ||
+                 e.PropertyName == nameof(Customer.Page) ||
+                 e.PropertyName == nameof(Customer.SequenceNumber)))
+            {
+                CustomersView.Refresh();
+                NotifyRouteEntryProgressChanged();
             }
         }
 
@@ -1575,12 +1651,25 @@ namespace ElectricCalculation.ViewModels
         {
             CustomersView.Refresh();
             NotifySummaryChanged();
+            NotifyRouteEntryProgressChanged();
         }
 
         partial void OnSelectedSearchFieldChanged(string value)
         {
             CustomersView.Refresh();
             NotifySummaryChanged();
+            NotifyRouteEntryProgressChanged();
+        }
+
+        partial void OnSelectedCustomerChanged(Customer? value)
+        {
+            NotifyRouteEntryProgressChanged();
+        }
+
+        partial void OnIsRouteEntryModeChanged(bool value)
+        {
+            ApplyRouteEntrySort();
+            NotifyRouteEntryProgressChanged();
         }
 
         partial void OnPeriodLabelChanged(string value)

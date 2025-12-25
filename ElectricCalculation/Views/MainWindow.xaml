@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:ElectricCalculation.ViewModels"
         xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        xmlns:helpers="clr-namespace:ElectricCalculation.Helpers"
         mc:Ignorable="d"
         Title="Electric Calculation"
         Height="720"
@@ -19,6 +20,7 @@
     </Window.DataContext>
 
     <Window.Resources>
+        <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </Window.Resources>
 
@@ -65,9 +67,9 @@
                           Command="{Binding RedoCommand}" />
                 <MenuItem Header="Lịch sử chỉnh sửa..."
                           Command="{Binding ShowEditHistoryCommand}" />
-                <MenuItem Header="Hiện cột nâng cao"
+                <MenuItem Header="Nhập nhanh"
                           IsCheckable="True"
-                          IsChecked="{Binding ShowAdvancedColumns, Mode=TwoWay}" />
+                          IsChecked="{Binding IsFastEntryMode, Mode=TwoWay}" />
                 <Separator />
                 <MenuItem Header="Nhân đôi dòng (Ctrl+Shift+D)"
                           Command="{Binding DuplicateRowCommand}"
@@ -106,6 +108,9 @@
 
         <StackPanel Grid.Row="1" Margin="0,0,0,8">
             <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding RouteEntryProgressText}"
+                           Visibility="{Binding IsRouteEntryMode, Converter={StaticResource BoolToVisibility}}"
+                           Margin="0,0,16,0" />
                 <Button Content="Trang chủ"
                         Padding="12,4"
                         Margin="0,0,16,0"
@@ -143,6 +148,26 @@
                          VerticalAlignment="Center"
                          Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
+                <ToggleButton Margin="12,0,0,0"
+                              Padding="12,4"
+                              IsChecked="{Binding IsFastEntryMode, Mode=TwoWay}">
+                    <ToggleButton.Style>
+                        <Style TargetType="{x:Type ToggleButton}">
+                            <Setter Property="Content" Value="Nhập nhanh" />
+                            <Style.Triggers>
+                                <Trigger Property="IsChecked" Value="False">
+                                    <Setter Property="Content" Value="Chi tiết" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ToggleButton.Style>
+                </ToggleButton>
+
+                <CheckBox Content="Nhập theo tuyến"
+                          Margin="12,0,0,0"
+                          VerticalAlignment="Center"
+                          IsChecked="{Binding IsRouteEntryMode, Mode=TwoWay}" />
+
             </StackPanel>
 
         </StackPanel>
@@ -175,7 +200,19 @@
                   behaviors:DataGridEnterToNextRowBehavior.IsEnabled="True"
                   behaviors:DataGridEnterToNextRowBehavior.TargetPropertyName="CurrentIndex"
                   behaviors:DataGridEnterToNextRowBehavior.SelectAllOnEdit="True"
+                  behaviors:DataGridFastEntryLockBehavior.IsEnabled="{Binding IsFastEntryMode}"
+                  behaviors:DataGridFastEntryLockBehavior.TargetPropertyName="CurrentIndex"
                   SelectedItem="{Binding SelectedCustomer, Mode=TwoWay}">
+            <DataGrid.Style>
+                <Style TargetType="{x:Type DataGrid}">
+                    <Setter Property="CanUserSortColumns" Value="True" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsRouteEntryMode}" Value="True">
+                            <Setter Property="CanUserSortColumns" Value="False" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.Style>
             <DataGrid.CellStyle>
                 <Style TargetType="{x:Type DataGridCell}">
                     <Setter Property="Padding" Value="6,2" />
@@ -184,7 +221,6 @@
 
             <DataGrid.RowStyle>
                 <Style TargetType="{x:Type DataGridRow}">
-                    <Setter Property="ToolTip" Value="{Binding StatusText}" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding HasUsageWarning}" Value="True">
                             <Setter Property="Background" Value="#FFFFEDD5" />
@@ -235,6 +271,7 @@
                 <DataGridTextColumn Header="Số phiếu"
                                     Binding="{Binding SequenceNumber, UpdateSourceTrigger=PropertyChanged}"
                                     IsReadOnly="True"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="78"
                                     MinWidth="78" />
                 <DataGridTextColumn Header="Tên khách"
@@ -243,38 +280,48 @@
                                     MinWidth="220" />
                 <DataGridTextColumn Header="Nhóm / Đơn vị"
                                     Binding="{Binding GroupName, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="1.2*"
                                     MinWidth="180" />
                 <DataGridTextColumn Header="Loại"
                                     Binding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="90" />
                 <DataGridTextColumn Header="Địa chỉ"
                                     Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="2.2*"
                                     MinWidth="260" />
                 <DataGridTextColumn Header="SĐT hộ"
                                     Binding="{Binding HouseholdPhone, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="110" />
                 <DataGridTextColumn Header="Đại diện"
                                     Binding="{Binding RepresentativeName, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="160" />
                 <DataGridTextColumn Header="SĐT"
                                     Binding="{Binding Phone, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="110" />
                 <DataGridTextColumn Header="Tòa / Mã sổ"
                                     Binding="{Binding BuildingName, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="110" />
                 <DataGridTextColumn Header="Công tơ"
                                     Binding="{Binding MeterNumber, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="110" />
                 <DataGridTextColumn Header="Vị trí"
                                     Binding="{Binding Location, UpdateSourceTrigger=PropertyChanged}"
                                     Width="100" />
                 <DataGridTextColumn Header="TBA"
                                     Binding="{Binding Substation, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="95" />
                 <DataGridTextColumn Header="Trang"
                                     Binding="{Binding Page, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="70" />
                 <DataGridTextColumn Header="Chỉ số cũ"
                                     Binding="{Binding PreviousIndex, UpdateSourceTrigger=PropertyChanged}"
@@ -286,33 +333,40 @@
                     <DataGridTextColumn.CellStyle>
                         <Style TargetType="{x:Type DataGridCell}">
                             <Setter Property="Padding" Value="6,2" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
-                                    <Setter Property="Background" Value="#FFFEF3C7" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGridTextColumn.CellStyle>
-                    <DataGridTextColumn.EditingElementStyle>
-                        <Style TargetType="{x:Type TextBox}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
-                                    <Setter Property="Background" Value="#FFFEF3C7" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGridTextColumn.EditingElementStyle>
-                </DataGridTextColumn>
+                             <Style.Triggers>
+                                 <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                     <Setter Property="Background" Value="#FFFEF3C7" />
+                                 </DataTrigger>
+                                 <DataTrigger Binding="{Binding IsZeroUsage}" Value="True">
+                                     <Setter Property="Background" Value="#FFE0F2FE" />
+                                 </DataTrigger>
+                             </Style.Triggers>
+                         </Style>
+                     </DataGridTextColumn.CellStyle>
+                     <DataGridTextColumn.EditingElementStyle>
+                         <Style TargetType="{x:Type TextBox}">
+                             <Style.Triggers>
+                                 <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                     <Setter Property="Background" Value="#FFFEF3C7" />
+                                 </DataTrigger>
+                                 <DataTrigger Binding="{Binding IsZeroUsage}" Value="True">
+                                     <Setter Property="Background" Value="#FFE0F2FE" />
+                                 </DataTrigger>
+                             </Style.Triggers>
+                         </Style>
+                     </DataGridTextColumn.EditingElementStyle>
+                 </DataGridTextColumn>
                 <DataGridTextColumn Header="Hệ số"
                                     Binding="{Binding Multiplier, UpdateSourceTrigger=PropertyChanged}"
-                                    Visibility="{Binding DataContext.ShowAdvancedColumns, ElementName=CustomerGrid, Converter={StaticResource BoolToVisibility}}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="80" />
                 <DataGridTextColumn Header="Bao cấp (kWh)"
                                     Binding="{Binding SubsidizedKwh, UpdateSourceTrigger=PropertyChanged}"
-                                    Visibility="{Binding DataContext.ShowAdvancedColumns, ElementName=CustomerGrid, Converter={StaticResource BoolToVisibility}}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="110" />
                 <DataGridTextColumn Header="Đơn giá"
                                     Binding="{Binding UnitPrice, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="110" />
                 <DataGridTextColumn Header="kWh"
                                     Binding="{Binding Consumption, StringFormat=N0}"
@@ -321,6 +375,7 @@
                 <DataGridTextColumn Header="kWh tính tiền"
                                     Binding="{Binding ChargeableKwh, StringFormat=N0}"
                                     IsReadOnly="True"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="120" />
                 <DataGridTextColumn Header="Thành tiền"
                                     Binding="{Binding Amount, StringFormat=N0}"
@@ -331,18 +386,23 @@
                                         Width="150">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        ToolTip="{Binding StatusTooltip}">
                                 <Ellipse Width="10" Height="10" Margin="0,0,6,0">
                                     <Ellipse.Style>
                                         <Style TargetType="{x:Type Ellipse}">
                                             <Setter Property="Fill" Value="#22C55E" />
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
-                                                    <Setter Property="Fill" Value="#F59E0B" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding HasUsageWarning}" Value="True">
-                                                    <Setter Property="Fill" Value="#F97316" />
-                                                </DataTrigger>
+                                                 <DataTrigger Binding="{Binding IsMissingReading}" Value="True">
+                                                     <Setter Property="Fill" Value="#F59E0B" />
+                                                 </DataTrigger>
+                                                 <DataTrigger Binding="{Binding IsZeroUsage}" Value="True">
+                                                     <Setter Property="Fill" Value="#3B82F6" />
+                                                 </DataTrigger>
+                                                 <DataTrigger Binding="{Binding HasUsageWarning}" Value="True">
+                                                     <Setter Property="Fill" Value="#F97316" />
+                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding HasReadingError}" Value="True">
                                                     <Setter Property="Fill" Value="#EF4444" />
                                                 </DataTrigger>
@@ -357,8 +417,9 @@
                 </DataGridTemplateColumn>
 
                 <DataGridTextColumn Header="Người ghi"
-                                     Binding="{Binding PerformedBy, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="150" />
+                                      Binding="{Binding PerformedBy, UpdateSourceTrigger=PropertyChanged}"
+                                      Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
+                                      Width="150" />
             </DataGrid.Columns>
         </DataGrid>
 

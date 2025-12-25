@@ -55,7 +55,9 @@ namespace ElectricCalculation.Models
         [NotifyPropertyChangedFor(nameof(IsMissingReading))]
         [NotifyPropertyChangedFor(nameof(HasReadingError))]
         [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
+        [NotifyPropertyChangedFor(nameof(IsZeroUsage))]
         [NotifyPropertyChangedFor(nameof(StatusText))]
+        [NotifyPropertyChangedFor(nameof(StatusTooltip))]
         private decimal previousIndex;
 
         [ObservableProperty]
@@ -65,7 +67,9 @@ namespace ElectricCalculation.Models
         [NotifyPropertyChangedFor(nameof(IsMissingReading))]
         [NotifyPropertyChangedFor(nameof(HasReadingError))]
         [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
+        [NotifyPropertyChangedFor(nameof(IsZeroUsage))]
         [NotifyPropertyChangedFor(nameof(StatusText))]
+        [NotifyPropertyChangedFor(nameof(StatusTooltip))]
         private decimal? currentIndex;
 
         [ObservableProperty]
@@ -74,6 +78,7 @@ namespace ElectricCalculation.Models
         [NotifyPropertyChangedFor(nameof(Amount))]
         [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
         [NotifyPropertyChangedFor(nameof(StatusText))]
+        [NotifyPropertyChangedFor(nameof(StatusTooltip))]
         private decimal multiplier = 1;
 
         [ObservableProperty]
@@ -88,11 +93,14 @@ namespace ElectricCalculation.Models
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasUsageWarning))]
         [NotifyPropertyChangedFor(nameof(StatusText))]
+        [NotifyPropertyChangedFor(nameof(StatusTooltip))]
         private decimal? averageConsumption3Periods;
 
         public bool IsMissingReading => CurrentIndex == null;
 
         public bool HasReadingError => CurrentIndex != null && CurrentIndex.Value < PreviousIndex;
+
+        public bool IsZeroUsage => CurrentIndex != null && CurrentIndex.Value == PreviousIndex;
 
         public bool HasUsageWarning
         {
@@ -129,6 +137,46 @@ namespace ElectricCalculation.Models
                 if (HasUsageWarning)
                 {
                     return "Cảnh báo: Tăng cao";
+                }
+
+                if (IsZeroUsage)
+                {
+                    return "0 kWh";
+                }
+
+                return "OK";
+            }
+        }
+
+        public string StatusTooltip
+        {
+            get
+            {
+                if (IsMissingReading)
+                {
+                    return "Thiếu: chưa nhập chỉ số mới";
+                }
+
+                if (HasReadingError)
+                {
+                    return "Lỗi: chỉ số mới < chỉ số cũ";
+                }
+
+                if (HasUsageWarning)
+                {
+                    if (AverageConsumption3Periods is > 0)
+                    {
+                        var ratio = Consumption / AverageConsumption3Periods.Value;
+                        var increasePercent = (ratio - 1) * 100;
+                        return $"Cảnh báo: kWh tăng {increasePercent:0}% so với TB 3 tháng";
+                    }
+
+                    return "Cảnh báo: kWh tăng cao";
+                }
+
+                if (IsZeroUsage)
+                {
+                    return "0 kWh: không tiêu thụ (CS mới = CS cũ)";
                 }
 
                 return "OK";
