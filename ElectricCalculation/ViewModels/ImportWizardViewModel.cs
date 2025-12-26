@@ -22,9 +22,9 @@ namespace ElectricCalculation.ViewModels
         private ImportPreviewResult preview;
         private bool suppressSheetReload;
 
-        private IReadOnlyList<ColumnOption> columnOptions = Array.Empty<ColumnOption>();
-        private IReadOnlyDictionary<string, ColumnOption> columnOptionsByLetter =
-            new Dictionary<string, ColumnOption>(StringComparer.OrdinalIgnoreCase);
+        private IReadOnlyList<FieldOption> fieldOptions = Array.Empty<FieldOption>();
+        private IReadOnlyDictionary<string, ColumnMappingViewModel> columnMappingsByLetter =
+            new Dictionary<string, ColumnMappingViewModel>(StringComparer.OrdinalIgnoreCase);
 
         private List<Customer> importedCustomers = new();
         private ImportRunReport? importReport;
@@ -90,10 +90,15 @@ namespace ElectricCalculation.ViewModels
         public bool HasPresetToast => !string.IsNullOrWhiteSpace(PresetToastMessage);
 
         [ObservableProperty]
-        private ObservableCollection<FieldMappingRowViewModel> importantFieldMappings = new();
+        private ObservableCollection<ColumnMappingViewModel> columnMappings = new();
+
+        public IReadOnlyList<FieldOption> FieldOptions => fieldOptions;
 
         [ObservableProperty]
-        private ObservableCollection<FieldMappingRowViewModel> optionalFieldMappings = new();
+        private bool isNameMapped;
+
+        [ObservableProperty]
+        private bool isAnyKeyFieldMapped;
 
         [ObservableProperty]
         private ObservableCollection<string> errorMessages = new();
@@ -219,14 +224,14 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
-        private void EditField(FieldMappingRowViewModel? row)
+        private void UnlockColumn(ColumnMappingViewModel? column)
         {
-            if (row == null)
+            if (column == null)
             {
                 return;
             }
 
-            row.IsLocked = false;
+            column.IsLocked = false;
         }
 
         [RelayCommand]
@@ -338,15 +343,14 @@ namespace ElectricCalculation.ViewModels
         {
             var result = new Dictionary<ExcelImportService.ImportField, string>();
 
-            foreach (var row in GetAllRows())
+            foreach (var column in ColumnMappings)
             {
-                var col = (row.SelectedColumn ?? string.Empty).Trim();
-                if (string.IsNullOrWhiteSpace(col))
+                if (column.SelectedField == null)
                 {
                     continue;
                 }
 
-                result[row.Field] = col;
+                result[column.SelectedField.Value] = column.ColumnLetter;
             }
 
             return result;
@@ -369,8 +373,8 @@ namespace ElectricCalculation.ViewModels
                 suppressSheetReload = false;
             }
 
-            BuildColumnOptions();
-            BuildFieldRows();
+            BuildFieldOptions();
+            BuildColumnMappings();
             LoadPresetOptionsAndApplyDefault();
 
             ErrorMessages = new ObservableCollection<string>();
@@ -387,41 +391,18 @@ namespace ElectricCalculation.ViewModels
             OnPropertyChanged(nameof(CanSavePreset));
         }
 
-        private void BuildColumnOptions()
+        public bool TryGetColumnMapping(string columnLetter, out ColumnMappingViewModel? mapping)
         {
-            var options = new List<ColumnOption>
+            mapping = null;
+            if (string.IsNullOrWhiteSpace(columnLetter))
             {
-                new(null, string.Empty, "(Chưa chọn)"),
-                new(string.Empty, string.Empty, "(Không dùng)")
-            };
-
-            foreach (var col in preview.Columns ?? Array.Empty<ImportColumnPreview>())
-            {
-                if (string.IsNullOrWhiteSpace(col.ColumnLetter))
-                {
-                    continue;
-                }
-
-                var letter = col.ColumnLetter.Trim().ToUpperInvariant();
-                var header = col.HeaderText ?? string.Empty;
-                var display = string.IsNullOrWhiteSpace(header) ? letter : $"{letter} - {header.Trim()}";
-
-                var sample = col.SampleValues == null || col.SampleValues.Count == 0
-                    ? string.Empty
-                    : string.Join(" | ", col.SampleValues.Where(v => !string.IsNullOrWhiteSpace(v)).Take(3));
-
-                options.Add(new ColumnOption(letter, header, display, sample));
+                return false;
             }
 
-            columnOptions = options;
-            columnOptionsByLetter = options
-                .Where(o => !string.IsNullOrWhiteSpace(o.ColumnLetter))
-                .GroupBy(o => o.ColumnLetter!, StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.First())
-                .ToDictionary(o => o.ColumnLetter!, o => o, StringComparer.OrdinalIgnoreCase);
+            return columnMappingsByLetter.TryGetValue(columnLetter.Trim().ToUpperInvariant(), out mapping);
         }
 
-        private void BuildFieldRows()
+        private void BuildFieldOptions()
         {
             var importantFields = new[]
             {
@@ -433,19 +414,44 @@ namespace ElectricCalculation.ViewModels
                 ExcelImportService.ImportField.UnitPrice
             };
 
-            var importantSet = new HashSet<ExcelImportService.ImportField>(importantFields);
-            var allFields = Enum.GetValues<ExcelImportService.ImportField>().ToList();
+            var allFields = Enum.GetValues<ExcelImportService.ImportField>();
+            var ordered = importantFields.Concat(allFields.Where(f => !importantFields.Contains(f))).ToList();
 
-            ImportantFieldMappings = new ObservableCollection<FieldMappingRowViewModel>(
-                importantFields.Select(f => CreateRow(f, isRequired: f == ExcelImportService.ImportField.Name)));
-
-            OptionalFieldMappings = new ObservableCollection<FieldMappingRowViewModel>(
-                allFields.Where(f => !importantSet.Contains(f))
-                         .Select(f => CreateRow(f, isRequired: false)));
-
-            foreach (var row in GetAllRows())
+            var options = new List<FieldOption> { new(null, "(Không dùng)") };
+            foreach (var field in ordered)
             {
-                row.SelectionChanged += (_, _) =>
+                var label = GetFieldLabel(field);
+                if (field == ExcelImportService.ImportField.Name)
+                {
+                    label = $"{label} (bắt buộc)";
+                }
+
+                options.Add(new FieldOption(field, label));
+            }
+
+            fieldOptions = options;
+            OnPropertyChanged(nameof(FieldOptions));
+        }
+
+        private void BuildColumnMappings()
+        {
+            var columns = (preview.Columns ?? Array.Empty<ImportColumnPreview>())
+                .Where(c => !string.IsNullOrWhiteSpace(c.ColumnLetter))
+                .Select(c => c with { ColumnLetter = c.ColumnLetter.Trim().ToUpperInvariant() })
+                .OrderBy(c => GetColumnIndex(c.ColumnLetter))
+                .ToList();
+
+            ColumnMappings = new ObservableCollection<ColumnMappingViewModel>(columns.Select(CreateColumnMapping));
+
+            columnMappingsByLetter = ColumnMappings
+                .Where(c => !string.IsNullOrWhiteSpace(c.ColumnLetter))
+                .GroupBy(c => c.ColumnLetter, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToDictionary(c => c.ColumnLetter, c => c, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var column in ColumnMappings)
+            {
+                column.SelectionChanged += (_, _) =>
                 {
                     UpdateConflictAndMissingFlags();
                     OnPropertyChanged(nameof(CanImport));
@@ -453,40 +459,20 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
-        private FieldMappingRowViewModel CreateRow(ExcelImportService.ImportField field, bool isRequired)
+        private ColumnMappingViewModel CreateColumnMapping(ImportColumnPreview column)
         {
-            var label = FieldLabels.TryGetValue(field, out var l) ? l : field.ToString();
-            var hint = isRequired ? "Bắt buộc" : "Tùy chọn";
-            if (isRequired)
-            {
-                label = $"{label} *";
-            }
+            var sample = column.SampleValues == null || column.SampleValues.Count == 0
+                ? string.Empty
+                : string.Join(" | ", column.SampleValues.Where(v => !string.IsNullOrWhiteSpace(v)).Take(3));
 
-            var suggested = GetBestSuggestedColumn(field);
-            var suggestedColumn = suggested?.ColumnLetter?.Trim().ToUpperInvariant();
-            var suggestedScore = suggested?.SuggestedScore ?? 0;
-
-            return new FieldMappingRowViewModel(
-                field: field,
-                label: label,
-                hint: hint,
-                isRequired: isRequired,
-                options: columnOptions,
-                suggestedColumn: suggestedColumn,
-                suggestedScore: suggestedScore);
-        }
-
-        private ImportColumnPreview? GetBestSuggestedColumn(ExcelImportService.ImportField field)
-        {
-            return (preview.Columns ?? Array.Empty<ImportColumnPreview>())
-                .Where(c =>
-                    c.SuggestedField != null &&
-                    c.SuggestedField.Value == field &&
-                    c.SuggestedScore > 0 &&
-                    !string.IsNullOrWhiteSpace(c.ColumnLetter))
-                .OrderByDescending(c => c.SuggestedScore)
-                .ThenBy(c => GetColumnIndex(c.ColumnLetter))
-                .FirstOrDefault();
+            var suggestedFieldLabel = column.SuggestedField != null ? GetFieldLabel(column.SuggestedField.Value) : null;
+            return new ColumnMappingViewModel(
+                columnLetter: column.ColumnLetter.Trim().ToUpperInvariant(),
+                headerText: column.HeaderText ?? string.Empty,
+                samplePreview: sample,
+                suggestedField: column.SuggestedField,
+                suggestedFieldLabel: suggestedFieldLabel,
+                suggestedScore: column.SuggestedScore);
         }
 
         private static int GetColumnIndex(string columnLetters)
@@ -513,26 +499,34 @@ namespace ElectricCalculation.ViewModels
         private void ApplyTemplateFallbackForUnselected()
         {
             var template = GetTemplateFallbackFieldToColumn();
+            var usedFields = new HashSet<ExcelImportService.ImportField>(
+                ColumnMappings.Where(c => c.SelectedField != null).Select(c => c.SelectedField!.Value));
 
-            foreach (var row in GetAllRows())
+            foreach (var pair in template)
             {
-                if (row.SelectedColumn != null)
+                if (usedFields.Contains(pair.Key))
                 {
                     continue;
                 }
 
-                if (!template.TryGetValue(row.Field, out var col))
+                var col = (pair.Value ?? string.Empty).Trim().ToUpperInvariant();
+                if (string.IsNullOrWhiteSpace(col))
                 {
                     continue;
                 }
 
-                var normalized = (col ?? string.Empty).Trim().ToUpperInvariant();
-                if (string.IsNullOrWhiteSpace(normalized) || !columnOptionsByLetter.ContainsKey(normalized))
+                if (!columnMappingsByLetter.TryGetValue(col, out var mapping))
                 {
                     continue;
                 }
 
-                row.SelectedColumn = normalized;
+                if (mapping.SelectedField != null)
+                {
+                    continue;
+                }
+
+                mapping.SelectedField = pair.Key;
+                usedFields.Add(pair.Key);
             }
         }
 
@@ -605,21 +599,30 @@ namespace ElectricCalculation.ViewModels
 
         private void ApplyAutoMapping()
         {
-            foreach (var row in GetAllRows())
+            foreach (var column in ColumnMappings)
             {
-                row.ResetSelection();
+                column.ResetSelection();
             }
 
-            foreach (var row in GetAllRows())
+            var candidates = ColumnMappings
+                .Where(c => c.SuggestedField != null && c.SuggestedScore >= ColumnMappingViewModel.AutoSelectThreshold)
+                .OrderByDescending(c => c.SuggestedScore)
+                .ThenBy(c => GetColumnIndex(c.ColumnLetter))
+                .ToList();
+
+            var usedFields = new HashSet<ExcelImportService.ImportField>();
+            foreach (var column in candidates)
             {
-                if (row.SuggestedScore < FieldMappingRowViewModel.AutoSelectThreshold ||
-                    string.IsNullOrWhiteSpace(row.SuggestedColumn))
+                var field = column.SuggestedField!.Value;
+                if (usedFields.Contains(field))
                 {
                     continue;
                 }
 
-                row.SelectedColumn = row.SuggestedColumn;
-                row.IsLocked = row.SuggestedScore >= FieldMappingRowViewModel.LockThreshold;
+                column.SelectedField = field;
+                column.IsLocked = column.SelectedField == column.SuggestedField &&
+                                  column.SuggestedScore >= ColumnMappingViewModel.LockThreshold;
+                usedFields.Add(field);
             }
 
             if (preview.HeaderRowIndex == null)
@@ -633,36 +636,30 @@ namespace ElectricCalculation.ViewModels
 
         private void ApplyProfile(ImportMappingProfile profile)
         {
-            foreach (var row in GetAllRows())
+            foreach (var column in ColumnMappings)
             {
-                row.ResetSelection();
-            }
-
-            foreach (var row in OptionalFieldMappings)
-            {
-                row.SelectedColumn = string.Empty;
+                column.ResetSelection();
             }
 
             foreach (var pair in profile.ConfirmedMap ?? new Dictionary<ExcelImportService.ImportField, string>())
             {
                 var col = (pair.Value ?? string.Empty).Trim().ToUpperInvariant();
-                if (string.IsNullOrWhiteSpace(col) || !columnOptionsByLetter.ContainsKey(col))
+                if (string.IsNullOrWhiteSpace(col))
                 {
                     continue;
                 }
 
-                var row = GetAllRows().FirstOrDefault(r => r.Field == pair.Key);
-                if (row != null)
+                if (columnMappingsByLetter.TryGetValue(col, out var mapping))
                 {
-                    row.SelectedColumn = col;
+                    mapping.SelectedField = pair.Key;
                 }
             }
 
-            foreach (var row in GetAllRows())
+            foreach (var column in ColumnMappings)
             {
-                row.IsLocked = row.SuggestedScore >= FieldMappingRowViewModel.LockThreshold &&
-                               !string.IsNullOrWhiteSpace(row.SuggestedColumn) &&
-                               string.Equals(row.SelectedColumn, row.SuggestedColumn, StringComparison.OrdinalIgnoreCase);
+                column.IsLocked = column.SelectedField != null &&
+                                  column.SelectedField == column.SuggestedField &&
+                                  column.SuggestedScore >= ColumnMappingViewModel.LockThreshold;
             }
 
             if (preview.HeaderRowIndex == null)
@@ -676,24 +673,71 @@ namespace ElectricCalculation.ViewModels
 
         private void UpdateConflictAndMissingFlags()
         {
-            foreach (var row in GetAllRows())
+            foreach (var column in ColumnMappings)
             {
-                row.IsConflict = false;
-                row.IsMissing = row.IsRequired && string.IsNullOrWhiteSpace(row.SelectedColumn);
-                row.UpdateSamplePreview(columnOptionsByLetter);
+                column.IsConflict = false;
+                column.IsRequiredMissing = false;
             }
 
-            var conflictGroups = GetAllRows()
-                .Where(r => !string.IsNullOrWhiteSpace(r.SelectedColumn))
-                .GroupBy(r => r.SelectedColumn!.Trim(), StringComparer.OrdinalIgnoreCase)
+            var conflictGroups = ColumnMappings
+                .Where(c => c.SelectedField != null)
+                .GroupBy(c => c.SelectedField!.Value)
                 .Where(g => g.Count() > 1)
                 .ToList();
 
             foreach (var group in conflictGroups)
             {
-                foreach (var row in group)
+                foreach (var column in group)
                 {
-                    row.IsConflict = true;
+                    column.IsConflict = true;
+                }
+            }
+
+            var selectedFields = ColumnMappings
+                .Where(c => c.SelectedField != null)
+                .Select(c => c.SelectedField!.Value)
+                .ToList();
+
+            IsNameMapped = selectedFields.Contains(ExcelImportService.ImportField.Name);
+
+            var keyFields = new[]
+            {
+                ExcelImportService.ImportField.MeterNumber,
+                ExcelImportService.ImportField.PreviousIndex,
+                ExcelImportService.ImportField.CurrentIndex,
+                ExcelImportService.ImportField.UnitPrice
+            };
+
+            IsAnyKeyFieldMapped = selectedFields.Any(f => keyFields.Contains(f));
+
+            if (!IsNameMapped)
+            {
+                var candidate = ColumnMappings
+                    .Where(c => c.SuggestedField == ExcelImportService.ImportField.Name && c.SuggestedScore > 0)
+                    .OrderByDescending(c => c.SuggestedScore)
+                    .ThenBy(c => GetColumnIndex(c.ColumnLetter))
+                    .FirstOrDefault();
+
+                if (candidate != null && candidate.SelectedField != ExcelImportService.ImportField.Name)
+                {
+                    candidate.IsRequiredMissing = true;
+                }
+            }
+
+            if (!IsAnyKeyFieldMapped)
+            {
+                foreach (var field in keyFields)
+                {
+                    var candidate = ColumnMappings
+                        .Where(c => c.SuggestedField == field && c.SuggestedScore > 0)
+                        .OrderByDescending(c => c.SuggestedScore)
+                        .ThenBy(c => GetColumnIndex(c.ColumnLetter))
+                        .FirstOrDefault();
+
+                    if (candidate != null && candidate.SelectedField != field)
+                    {
+                        candidate.IsRequiredMissing = true;
+                    }
                 }
             }
 
@@ -702,7 +746,7 @@ namespace ElectricCalculation.ViewModels
 
         private bool HasBlockingErrors()
         {
-            if (GetAllRows().Any(r => r.IsConflict))
+            if (ColumnMappings.Any(c => c.IsConflict))
             {
                 return true;
             }
@@ -742,22 +786,17 @@ namespace ElectricCalculation.ViewModels
                 errors.Add("❌ Cần chọn ít nhất 1 trong: Số công tơ / Chỉ số cũ / Chỉ số mới / Đơn giá");
             }
 
-            var conflictGroups = GetAllRows()
-                .Where(r => !string.IsNullOrWhiteSpace(r.SelectedColumn))
-                .GroupBy(r => r.SelectedColumn!.Trim(), StringComparer.OrdinalIgnoreCase)
+            var conflictGroups = ColumnMappings
+                .Where(c => c.SelectedField != null)
+                .GroupBy(c => c.SelectedField!.Value)
                 .Where(g => g.Count() > 1)
                 .ToList();
 
             foreach (var group in conflictGroups)
             {
-                var col = group.Key;
-                var colDisplay = columnOptionsByLetter.TryGetValue(col, out var opt) ? opt.DisplayName : col;
-                var fields = group.Select(r => r.Label).ToList();
-
-                if (fields.Count >= 2)
-                {
-                    errors.Add($"❌ Trùng cột: {string.Join(" và ", fields)} đều chọn cột \"{colDisplay}\"");
-                }
+                var fieldLabel = GetFieldLabel(group.Key);
+                var columns = group.Select(GetColumnDisplay).ToList();
+                errors.Add($"❌ Trùng mapping: {fieldLabel} đang được chọn ở {string.Join(", ", columns)}");
             }
 
             return errors;
@@ -972,17 +1011,15 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
-        private IEnumerable<FieldMappingRowViewModel> GetAllRows()
+        private static string GetFieldLabel(ExcelImportService.ImportField field)
         {
-            foreach (var row in ImportantFieldMappings)
-            {
-                yield return row;
-            }
+            return FieldLabels.TryGetValue(field, out var label) ? label : field.ToString();
+        }
 
-            foreach (var row in OptionalFieldMappings)
-            {
-                yield return row;
-            }
+        private static string GetColumnDisplay(ColumnMappingViewModel column)
+        {
+            var header = (column.HeaderText ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(header) ? column.ColumnLetter : $"{column.ColumnLetter} - {header}";
         }
 
         private static readonly Dictionary<ExcelImportService.ImportField, string> FieldLabels = new()

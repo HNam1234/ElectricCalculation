@@ -175,11 +175,20 @@ namespace ElectricCalculation.Services
                 headerCells = new Dictionary<string, string?>(previewRows[0].Cells, StringComparer.OrdinalIgnoreCase);
             }
 
+            if (sampleRows.Count == 0 && previewRows.Count > 1)
+            {
+                var assumedHeaderRow = headerRowIndex ?? previewRows[0].RowIndex;
+                foreach (var row in previewRows.Where(r => r.RowIndex > assumedHeaderRow).Take(5))
+                {
+                    sampleRows.Add(row);
+                }
+            }
+
             var orderedColumns = columns
                 .OrderBy(GetColumnIndex)
                 .ToArray();
 
-            var previewTable = BuildPreviewDataTable(orderedColumns, previewRows);
+            var previewTable = BuildPreviewDataTable(orderedColumns, previewRows, headerCells);
 
             var columnPreviews = new List<ImportColumnPreview>(orderedColumns.Length);
             foreach (var column in orderedColumns)
@@ -630,14 +639,23 @@ namespace ElectricCalculation.Services
             return cells;
         }
 
-        private static DataTable BuildPreviewDataTable(string[] orderedColumns, IReadOnlyList<ImportSampleRow> previewRows)
+        private static DataTable BuildPreviewDataTable(
+            string[] orderedColumns,
+            IReadOnlyList<ImportSampleRow> previewRows,
+            IReadOnlyDictionary<string, string?>? headerCells)
         {
             var table = new DataTable();
-            table.Columns.Add("Row", typeof(int));
+            table.Columns.Add("Row", typeof(int)).Caption = "Dòng";
 
             foreach (var column in orderedColumns)
             {
-                table.Columns.Add(column, typeof(string));
+                var dataColumn = table.Columns.Add(column, typeof(string));
+                if (headerCells != null &&
+                    headerCells.TryGetValue(column, out var headerText) &&
+                    !string.IsNullOrWhiteSpace(headerText))
+                {
+                    dataColumn.Caption = $"{column} - {headerText.Trim()}";
+                }
             }
 
             foreach (var row in previewRows)
