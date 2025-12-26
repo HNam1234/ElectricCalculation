@@ -251,6 +251,11 @@
                                    FontSize="12"
                                    Margin="0,4,0,0"
                                    TextWrapping="Wrap" />
+                        <TextBlock Text="Chỉ dùng cho bộ dữ liệu nhỏ (≤10 công tơ)"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="11"
+                                   Margin="0,6,0,0"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Button>
@@ -290,10 +295,11 @@
                         <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE8A5;" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                        <TextBlock Text="Nhập từ Excel"
+                        <TextBlock Text="Tạo bộ dữ liệu từ Excel (khuyến nghị)"
                                    Foreground="{StaticResource TextPrimary}"
                                    FontSize="14"
-                                   FontWeight="SemiBold" />
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap" />
                         <TextBlock Text="Chọn file Excel để nhập dữ liệu."
                                    Foreground="{StaticResource TextSecondary}"
                                    FontSize="12"
