@@ -24,6 +24,7 @@ namespace ElectricCalculation.ViewModels
         private readonly UndoRedoManager _undoRedo = new();
         private readonly List<string> _editHistory = new();
         private bool _suppressDirty;
+        private bool _lastImportExcelSucceeded;
 
         [ObservableProperty]
         private string? currentDataFilePath;
@@ -149,13 +150,17 @@ namespace ElectricCalculation.ViewModels
             try
             {
                 _suppressDirty = true;
-                _undoRedo.Clear();
 
                 try
                 {
                     ImportFromExcel(filePath);
-                    IsDirty = true;
-                    LoadedSnapshotPath = null;
+
+                    if (_lastImportExcelSucceeded)
+                    {
+                        _undoRedo.Clear();
+                        IsDirty = true;
+                        LoadedSnapshotPath = null;
+                    }
                 }
                 catch (WarningException warning)
                 {
@@ -441,28 +446,37 @@ namespace ElectricCalculation.ViewModels
                 throw new WarningException("Không tìm thấy file Excel để import.");
             }
 
+            _lastImportExcelSucceeded = false;
+
+            var wizard = _ui.ShowImportWizardDialog(filePath);
+            if (wizard == null)
+            {
+                return;
+            }
+
+            var imported = wizard.ImportedCustomers?.ToList() ?? new List<Customer>();
+
+            if (imported.Count == 0)
+            {
+                return;
+            }
+
+            SelectedCustomer = null;
             Customers.Clear();
-
-            var imported = Services.ExcelImportService.ImportFromFile(filePath, out var warningMessage);
-            foreach (var item in imported)
+            foreach (var customer in imported)
             {
-                ApplyDefaultsIfNeeded(item, applyWhen: _settings.ApplyDefaultsOnImport);
-                Customers.Add(item);
-            }
-
-            if (!string.IsNullOrWhiteSpace(warningMessage))
-            {
-                Debug.WriteLine(warningMessage);
-                if (!warningMessage.Contains("Khong thay dong tieu de", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(InvoiceIssuer) && string.IsNullOrWhiteSpace(customer.PerformedBy))
                 {
-                    _ui.ShowMessage("Thong bao import Excel", warningMessage);
+                    customer.PerformedBy = InvoiceIssuer;
                 }
+
+                ApplyDefaultsIfNeeded(customer, applyWhen: _settings.ApplyDefaultsOnImport);
+                Customers.Add(customer);
             }
 
-            if (Customers.Count == 0)
-            {
-                throw new WarningException("Import xong nhưng không có dòng dữ liệu nào. Hãy kiểm tra lại sheet 'Data' trong file Excel nguồn.");
-            }
+            _undoRedo.Clear();
+            LoadedSnapshotPath = null;
+            _lastImportExcelSucceeded = true;
 
             if (!_suppressDirty)
             {

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Globalization;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
 using ElectricCalculation.Models;
@@ -16,7 +18,7 @@ namespace ElectricCalculation.Services
     // O: Current, P: Previous, Q: Multiplier, S: Subsidy, U: Unit price, W: Performed by.
     public static class ExcelImportService
     {
-        private enum ImportField
+        public enum ImportField
         {
             SequenceNumber,
             Name,
@@ -40,6 +42,748 @@ namespace ElectricCalculation.Services
         }
 
         private sealed record SheetInfo(string Name, string Path);
+
+        private sealed record FieldRule(ImportField Field, string[] Keywords, int Priority, bool Required);
+
+        private sealed record CompiledFieldRule(ImportField Field, string[] Keywords, int Priority, bool Required);
+
+        private const double HeaderFieldScoreThreshold = 0.55;
+
+        private static readonly IReadOnlyList<FieldRule> FieldRules = new[]
+        {
+            new FieldRule(ImportField.SequenceNumber, new[] { "stt", "so thu tu", "so tt", "no", "no." }, Priority: 10, Required: false),
+            new FieldRule(ImportField.Name, new[] { "ten khach", "khach hang", "ho ten", "ten", "name" }, Priority: 10, Required: true),
+            new FieldRule(ImportField.MeterNumber, new[] { "so cong to", "cong to", "meter", "meter number" }, Priority: 10, Required: false),
+            new FieldRule(ImportField.CurrentIndex, new[] { "chi so moi", "cs moi", "current", "end" }, Priority: 10, Required: false),
+            new FieldRule(ImportField.PreviousIndex, new[] { "chi so cu", "cs cu", "previous", "start" }, Priority: 10, Required: false),
+            new FieldRule(ImportField.UnitPrice, new[] { "don gia", "gia", "unit price", "price" }, Priority: 10, Required: false),
+            new FieldRule(ImportField.Multiplier, new[] { "he so", "hs", "multiplier" }, Priority: 10, Required: false),
+
+            new FieldRule(ImportField.GroupName, new[] { "nhom", "don vi", "group", "unit" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Address, new[] { "dia chi", "dc", "address" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Phone, new[] { "dien thoai", "so dt", "sdt", "dt", "phone" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.HouseholdPhone, new[] { "dt ho", "dien thoai ho", "so dt ho" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.RepresentativeName, new[] { "dai dien", "nguoi dai dien", "representative" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Location, new[] { "vi tri", "location" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Substation, new[] { "tram", "tba", "substation" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Page, new[] { "trang", "page" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.SubsidizedKwh, new[] { "bao cap", "tro cap", "mien giam", "subsidy" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.PerformedBy, new[] { "nguoi thu", "nguoi ghi", "performed" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.BuildingName, new[] { "toa", "nha", "ma so", "building", "book" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Category, new[] { "loai", "category" }, Priority: 0, Required: false)
+        };
+
+        private static readonly IReadOnlyList<CompiledFieldRule> CompiledFieldRules = FieldRules
+            .Select(rule => new CompiledFieldRule(
+                rule.Field,
+                rule.Keywords
+                    .Select(NormalizeHeader)
+                    .Where(keyword => !string.IsNullOrWhiteSpace(keyword))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                rule.Priority,
+                rule.Required))
+            .ToArray();
+
+        private static readonly string[] PreferredNormalizedSheetNames =
+        {
+            "data",
+            "bang ke",
+            "ban in so"
+        };
+
+        public static ImportPreviewResult BuildPreview(string filePath)
+        {
+            return BuildPreview(filePath, sheetName: null);
+        }
+
+        public static ImportPreviewResult BuildPreview(string filePath, string? sheetName)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new InvalidOperationException("Duong dan file Excel dang trong.");
+            }
+
+            using var archive = ZipFile.OpenRead(filePath);
+
+            XNamespace mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            XNamespace relNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+            XNamespace relPackageNs = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+            var workbookDoc = LoadWorkbookDocument(archive);
+            var workbookRelsDoc = LoadWorkbookRelationshipsDocument(archive);
+            var sheets = LoadSheetInfos(workbookDoc, workbookRelsDoc, mainNs, relNs, relPackageNs);
+
+            var selectedSheet = SelectSheet(sheets, sheetName, out var sheetWarningMessage);
+            var sharedStrings = LoadSharedStrings(archive, mainNs);
+            var sheetDataElement = LoadSheetDataElement(archive, mainNs, selectedSheet.Path);
+
+            var previewRows = new List<ImportSampleRow>(capacity: 10);
+            var sampleRows = new List<ImportSampleRow>(capacity: 5);
+            var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            Dictionary<string, string?>? headerCells = null;
+            int? headerRowIndex = null;
+            int? dataStartRowIndex = null;
+            Dictionary<ImportField, string>? detectedHeaderMap = null;
+
+            foreach (var row in sheetDataElement.Elements(mainNs + "row"))
+            {
+                if (!int.TryParse((string?)row.Attribute("r"), out var rowIndex))
+                {
+                    continue;
+                }
+
+                var cells = ReadRowCells(row, mainNs, sharedStrings);
+                foreach (var key in cells.Keys)
+                {
+                    columns.Add(key);
+                }
+
+                if (previewRows.Count < 10)
+                {
+                    previewRows.Add(new ImportSampleRow(rowIndex, cells));
+                }
+
+                if (headerRowIndex == null && rowIndex <= 200 && TryDetectHeaderMap(cells, out var detectedMap))
+                {
+                    headerRowIndex = rowIndex;
+                    dataStartRowIndex = rowIndex + 1;
+                    detectedHeaderMap = detectedMap;
+                    headerCells = new Dictionary<string, string?>(cells, StringComparer.OrdinalIgnoreCase);
+                    continue;
+                }
+
+                if (dataStartRowIndex != null &&
+                    rowIndex >= dataStartRowIndex.Value &&
+                    sampleRows.Count < 5)
+                {
+                    sampleRows.Add(new ImportSampleRow(rowIndex, cells));
+                }
+
+                var reachedPreview = previewRows.Count >= 10;
+                var reachedScan = rowIndex > 200 || headerRowIndex != null;
+                var reachedSamples = headerRowIndex == null || sampleRows.Count >= 5;
+                if (reachedPreview && reachedScan && reachedSamples)
+                {
+                    break;
+                }
+            }
+
+            if (headerCells == null && previewRows.Count > 0)
+            {
+                headerCells = new Dictionary<string, string?>(previewRows[0].Cells, StringComparer.OrdinalIgnoreCase);
+            }
+
+            var orderedColumns = columns
+                .OrderBy(GetColumnIndex)
+                .ToArray();
+
+            var previewTable = BuildPreviewDataTable(orderedColumns, previewRows);
+
+            var columnPreviews = new List<ImportColumnPreview>(orderedColumns.Length);
+            foreach (var column in orderedColumns)
+            {
+                headerCells ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+                var headerText = headerCells.TryGetValue(column, out var headerValue) ? headerValue ?? string.Empty : string.Empty;
+                var normalizedHeader = NormalizeHeader(headerText);
+
+                ImportField? suggestedField = null;
+                var suggestedScore = 0d;
+
+                var scoredFields = ScoreFields(normalizedHeader);
+                if (scoredFields.Count > 0 && scoredFields[0].score >= HeaderFieldScoreThreshold)
+                {
+                    suggestedField = scoredFields[0].field;
+                    suggestedScore = scoredFields[0].score;
+                }
+
+                var sampleValues = GetSampleValues(sampleRows, column, maxCount: 5);
+                columnPreviews.Add(new ImportColumnPreview(column, headerText, sampleValues, suggestedField, suggestedScore));
+            }
+
+            ApplyAmbiguousIndexHeuristics(columnPreviews);
+
+            var headerSignature = headerRowIndex == null
+                ? null
+                : ComputeHeaderSignature(orderedColumns.Select(c =>
+                    NormalizeHeader(headerCells != null && headerCells.TryGetValue(c, out var value) ? value : null)));
+
+            var warningMessage = AppendWarning(sheetWarningMessage, detectedHeaderMap != null ? BuildHeaderMissingColumnsWarning(detectedHeaderMap) : null);
+
+            return new ImportPreviewResult(
+                filePath,
+                sheets.Select(s => s.Name).ToArray(),
+                selectedSheet.Name,
+                headerRowIndex,
+                dataStartRowIndex,
+                headerSignature,
+                columnPreviews,
+                previewTable,
+                sampleRows,
+                warningMessage);
+        }
+
+        public static IList<Customer> ImportFromFile(
+            string filePath,
+            Dictionary<ImportField, string> confirmedMap,
+            int? dataStartRowIndex,
+            out string? warningMessage,
+            out ImportRunReport report)
+        {
+            return ImportFromFile(filePath, sheetName: null, confirmedMap, dataStartRowIndex, out warningMessage, out report);
+        }
+
+        public static IList<Customer> ImportFromFile(
+            string filePath,
+            string? sheetName,
+            Dictionary<ImportField, string> confirmedMap,
+            int? dataStartRowIndex,
+            out string? warningMessage,
+            out ImportRunReport report)
+        {
+            warningMessage = null;
+            var warnings = new List<string>();
+            var errors = new List<string>();
+            var result = new List<Customer>();
+
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new InvalidOperationException("Duong dan file Excel dang trong.");
+            }
+
+            using var archive = ZipFile.OpenRead(filePath);
+
+            XNamespace mainNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            XNamespace relNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+            XNamespace relPackageNs = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+            var workbookDoc = LoadWorkbookDocument(archive);
+            var workbookRelsDoc = LoadWorkbookRelationshipsDocument(archive);
+            var sheets = LoadSheetInfos(workbookDoc, workbookRelsDoc, mainNs, relNs, relPackageNs);
+
+            var selectedSheet = SelectSheet(sheets, sheetName, out var sheetWarningMessage);
+            warningMessage = AppendWarning(warningMessage, sheetWarningMessage);
+
+            var sharedStrings = LoadSharedStrings(archive, mainNs);
+            var sheetDataElement = LoadSheetDataElement(archive, mainNs, selectedSheet.Path);
+
+            var headerMap = confirmedMap ?? new Dictionary<ImportField, string>();
+            var allowTemplateFallbackColumns = false;
+            string Fallback(string column) => allowTemplateFallbackColumns ? column : string.Empty;
+            var fallbackSequenceNumber = 1;
+
+            var totalRows = 0;
+            var importedRows = 0;
+            var skippedRows = 0;
+
+            foreach (var row in sheetDataElement.Elements(mainNs + "row"))
+            {
+                if (!int.TryParse((string?)row.Attribute("r"), out var rowIndex))
+                {
+                    continue;
+                }
+
+                var cells = ReadRowCells(row, mainNs, sharedStrings);
+
+                if (dataStartRowIndex == null && rowIndex <= 200 && TryDetectHeaderMap(cells, out _))
+                {
+                    dataStartRowIndex = rowIndex + 1;
+                    continue;
+                }
+
+                var sequenceNumber = GetMappedInt(cells, headerMap, ImportField.SequenceNumber, fallbackColumn: Fallback("A"));
+
+                if (dataStartRowIndex == null)
+                {
+                    if (sequenceNumber > 0)
+                    {
+                        dataStartRowIndex = rowIndex;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+
+                if (rowIndex < dataStartRowIndex.Value)
+                {
+                    continue;
+                }
+
+                totalRows++;
+
+                if (sequenceNumber <= 0)
+                {
+                    if (!headerMap.ContainsKey(ImportField.SequenceNumber))
+                    {
+                        var hasSomeData =
+                            !string.IsNullOrWhiteSpace(GetMappedString(cells, headerMap, ImportField.Name, fallbackColumn: Fallback("B"))) ||
+                            !string.IsNullOrWhiteSpace(GetMappedString(cells, headerMap, ImportField.MeterNumber, fallbackColumn: Fallback("J")));
+
+                        if (!hasSomeData)
+                        {
+                            skippedRows++;
+                            continue;
+                        }
+
+                        sequenceNumber = fallbackSequenceNumber++;
+                    }
+                    else
+                    {
+                        skippedRows++;
+                        continue;
+                    }
+                }
+
+                if (!headerMap.ContainsKey(ImportField.SequenceNumber))
+                {
+                    fallbackSequenceNumber = Math.Max(fallbackSequenceNumber, sequenceNumber + 1);
+                }
+
+                var householdPhone = (GetMappedString(cells, headerMap, ImportField.HouseholdPhone, fallbackColumn: Fallback("E")) ?? string.Empty).Trim();
+                var representativePhone = (GetMappedString(cells, headerMap, ImportField.Phone, fallbackColumn: Fallback("G")) ?? string.Empty).Trim();
+
+                if (string.IsNullOrWhiteSpace(representativePhone))
+                {
+                    representativePhone = householdPhone;
+                }
+
+                var representativeName = (GetMappedString(cells, headerMap, ImportField.RepresentativeName, fallbackColumn: Fallback("F")) ?? string.Empty).Trim();
+                var householdName = (GetMappedString(cells, headerMap, ImportField.Name, fallbackColumn: Fallback("B")) ?? string.Empty).Trim();
+
+                var customer = new Customer
+                {
+                    SequenceNumber = sequenceNumber,
+                    Name = householdName,
+                    GroupName = (GetMappedString(cells, headerMap, ImportField.GroupName, fallbackColumn: Fallback("C")) ?? string.Empty).Trim(),
+                    Address = (GetMappedString(cells, headerMap, ImportField.Address, fallbackColumn: Fallback("D")) ?? string.Empty).Trim(),
+                    RepresentativeName = representativeName,
+                    HouseholdPhone = householdPhone,
+                    Phone = representativePhone,
+                    BuildingName = (GetMappedString(cells, headerMap, ImportField.BuildingName, fallbackColumn: Fallback("H")) ?? string.Empty).Trim(),
+                    MeterNumber = (GetMappedString(cells, headerMap, ImportField.MeterNumber, fallbackColumn: Fallback("J")) ?? string.Empty).Trim(),
+                    Category = (GetMappedString(cells, headerMap, ImportField.Category, fallbackColumn: Fallback("K")) ?? string.Empty).Trim(),
+                    Location = (GetMappedString(cells, headerMap, ImportField.Location, fallbackColumn: Fallback("L")) ?? string.Empty).Trim()
+                };
+
+                customer.Substation = (GetMappedString(cells, headerMap, ImportField.Substation, fallbackColumn: Fallback("M")) ?? string.Empty).Trim();
+                customer.Page = (GetMappedString(cells, headerMap, ImportField.Page, fallbackColumn: Fallback("N")) ?? string.Empty).Trim();
+
+                customer.CurrentIndex = GetMappedNullableDecimal(cells, headerMap, ImportField.CurrentIndex, fallbackColumn: Fallback("O"));
+                customer.PreviousIndex = GetMappedDecimal(cells, headerMap, ImportField.PreviousIndex, fallbackColumn: Fallback("P"));
+                customer.Multiplier = GetMappedDecimal(cells, headerMap, ImportField.Multiplier, fallbackColumn: Fallback("Q"));
+                customer.SubsidizedKwh = GetMappedDecimal(cells, headerMap, ImportField.SubsidizedKwh, fallbackColumn: Fallback("S"));
+                customer.UnitPrice = GetMappedDecimal(cells, headerMap, ImportField.UnitPrice, fallbackColumn: Fallback("U"));
+
+                customer.PerformedBy = (GetMappedString(cells, headerMap, ImportField.PerformedBy, fallbackColumn: Fallback("W")) ?? string.Empty).Trim();
+
+                var unitPriceText = GetMappedString(cells, headerMap, ImportField.UnitPrice, fallbackColumn: Fallback("U"));
+                if (!string.IsNullOrWhiteSpace(unitPriceText) &&
+                    !decimal.TryParse(unitPriceText, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+                {
+                    warnings.Add($"Dong {rowIndex}: Don gia '{unitPriceText}' khong doc duoc (co the bi tinh = 0).");
+                }
+
+                if (customer.Multiplier <= 0)
+                {
+                    warnings.Add($"Dong {rowIndex}: He so <= 0, tu dong set = 1.");
+                    customer.Multiplier = 1;
+                }
+
+                if (customer.CurrentIndex.HasValue && customer.CurrentIndex.Value < customer.PreviousIndex)
+                {
+                    warnings.Add($"Dong {rowIndex}: Chi so moi < chi so cu (moi={customer.CurrentIndex:0.##}, cu={customer.PreviousIndex:0.##}).");
+                }
+
+                result.Add(customer);
+                importedRows++;
+            }
+
+            report = new ImportRunReport(
+                TotalRows: totalRows,
+                ImportedRows: importedRows,
+                SkippedRows: skippedRows,
+                WarningCount: warnings.Count,
+                ErrorCount: errors.Count,
+                Warnings: warnings,
+                Errors: errors);
+
+            return result;
+        }
+
+        private static XDocument LoadWorkbookDocument(ZipArchive archive)
+        {
+            var workbookEntry = archive.GetEntry("xl/workbook.xml");
+            if (workbookEntry == null)
+            {
+                throw new InvalidOperationException("File Excel khong hop le: thieu xl/workbook.xml.");
+            }
+
+            return XDocument.Load(workbookEntry.Open());
+        }
+
+        private static XDocument LoadWorkbookRelationshipsDocument(ZipArchive archive)
+        {
+            var relEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
+            if (relEntry == null)
+            {
+                throw new InvalidOperationException("File Excel khong hop le: thieu xl/_rels/workbook.xml.rels.");
+            }
+
+            return XDocument.Load(relEntry.Open());
+        }
+
+        private static IReadOnlyList<SheetInfo> LoadSheetInfos(
+            XDocument workbookDoc,
+            XDocument relDoc,
+            XNamespace mainNs,
+            XNamespace relNs,
+            XNamespace relPackageNs)
+        {
+            var sheetsElement = workbookDoc.Root?.Element(mainNs + "sheets");
+            if (sheetsElement == null)
+            {
+                throw new InvalidOperationException("File Excel khong hop le: khong tim thay danh sach sheet.");
+            }
+
+            var relationships = relDoc
+                .Root?
+                .Elements(relPackageNs + "Relationship")
+                .Select(r => new
+                {
+                    Id = (string?)r.Attribute("Id"),
+                    Target = (string?)r.Attribute("Target")
+                })
+                .Where(r => !string.IsNullOrWhiteSpace(r.Id) && !string.IsNullOrWhiteSpace(r.Target))
+                .ToDictionary(r => r.Id!, r => r.Target!, StringComparer.Ordinal)
+                ?? new Dictionary<string, string>(StringComparer.Ordinal);
+
+            var relIdAttributeName = XName.Get("id", relNs.NamespaceName);
+            var result = new List<SheetInfo>();
+
+            foreach (var sheet in sheetsElement.Elements(mainNs + "sheet"))
+            {
+                var name = (string?)sheet.Attribute("name") ?? string.Empty;
+                var relId = (string?)sheet.Attribute(relIdAttributeName);
+                if (string.IsNullOrWhiteSpace(relId))
+                {
+                    continue;
+                }
+
+                if (!relationships.TryGetValue(relId, out var target) || string.IsNullOrWhiteSpace(target))
+                {
+                    continue;
+                }
+
+                var sheetPath = target.StartsWith("/", StringComparison.Ordinal)
+                    ? "xl" + target
+                    : "xl/" + target;
+
+                result.Add(new SheetInfo(name, sheetPath));
+            }
+
+            return result;
+        }
+
+        private static SheetInfo SelectSheet(IReadOnlyList<SheetInfo> sheets, string? requestedSheetName, out string? warningMessage)
+        {
+            warningMessage = null;
+            if (sheets == null || sheets.Count == 0)
+            {
+                throw new InvalidOperationException("Khong tim thay sheet nao trong workbook.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(requestedSheetName))
+            {
+                var match = sheets.FirstOrDefault(s => string.Equals(s.Name, requestedSheetName, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    return match;
+                }
+
+                warningMessage = $"Khong tim thay sheet '{requestedSheetName}'. Dang dung sheet '{sheets[0].Name}'.";
+            }
+
+            var dataSheet = sheets.FirstOrDefault(s => string.Equals(NormalizeHeader(s.Name), "data", StringComparison.OrdinalIgnoreCase));
+            if (dataSheet != null)
+            {
+                return dataSheet;
+            }
+
+            var preferred = sheets.FirstOrDefault(s => PreferredNormalizedSheetNames.Contains(NormalizeHeader(s.Name), StringComparer.OrdinalIgnoreCase));
+            if (preferred != null)
+            {
+                return preferred;
+            }
+
+            warningMessage ??= $"Khong tim thay sheet 'Data'. Dang doc tu sheet '{sheets[0].Name}'.";
+            return sheets[0];
+        }
+
+        private static List<string> LoadSharedStrings(ZipArchive archive, XNamespace mainNs)
+        {
+            var sharedStrings = new List<string>();
+            var sharedEntry = archive.GetEntry("xl/sharedStrings.xml");
+            if (sharedEntry == null)
+            {
+                return sharedStrings;
+            }
+
+            var sharedDoc = XDocument.Load(sharedEntry.Open());
+            foreach (var si in sharedDoc.Root!.Elements(mainNs + "si"))
+            {
+                var textParts = si
+                    .Descendants(mainNs + "t")
+                    .Select(t => (string?)t ?? string.Empty);
+
+                sharedStrings.Add(string.Concat(textParts));
+            }
+
+            return sharedStrings;
+        }
+
+        private static XElement LoadSheetDataElement(ZipArchive archive, XNamespace mainNs, string sheetPath)
+        {
+            if (string.IsNullOrWhiteSpace(sheetPath))
+            {
+                throw new InvalidOperationException("Khong xac dinh duoc duong dan sheet trong file Excel.");
+            }
+
+            var sheetEntry = archive.GetEntry(sheetPath);
+            if (sheetEntry == null)
+            {
+                throw new InvalidOperationException($"File Excel khong hop le: thieu {sheetPath}.");
+            }
+
+            var sheetDoc = XDocument.Load(sheetEntry.Open());
+            var sheetDataElement = sheetDoc.Root?.Element(mainNs + "sheetData");
+            if (sheetDataElement == null)
+            {
+                throw new InvalidOperationException($"Sheet '{sheetPath}' khong chua du lieu (sheetData).");
+            }
+
+            return sheetDataElement;
+        }
+
+        private static Dictionary<string, string?> ReadRowCells(XElement row, XNamespace mainNs, IReadOnlyList<string> sharedStrings)
+        {
+            var cells = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var cell in row.Elements(mainNs + "c"))
+            {
+                var reference = (string?)cell.Attribute("r");
+                if (string.IsNullOrWhiteSpace(reference))
+                {
+                    continue;
+                }
+
+                var columnLetters = new string(reference.TakeWhile(char.IsLetter).ToArray());
+                if (string.IsNullOrEmpty(columnLetters))
+                {
+                    continue;
+                }
+
+                var type = (string?)cell.Attribute("t");
+                string? cellValue = null;
+
+                if (string.Equals(type, "inlineStr", StringComparison.OrdinalIgnoreCase))
+                {
+                    var textParts = cell
+                        .Descendants(mainNs + "is")
+                        .Descendants(mainNs + "t")
+                        .Select(t => (string?)t ?? string.Empty);
+
+                    cellValue = string.Concat(textParts);
+                }
+                else
+                {
+                    var valueElement = cell.Element(mainNs + "v");
+                    if (valueElement != null)
+                    {
+                        var rawValue = valueElement.Value;
+
+                        if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index) &&
+                                index >= 0 &&
+                                index < sharedStrings.Count)
+                            {
+                                cellValue = sharedStrings[index];
+                            }
+                            else
+                            {
+                                cellValue = rawValue;
+                            }
+                        }
+                        else
+                        {
+                            cellValue = rawValue;
+                        }
+                    }
+                }
+
+                cells[columnLetters] = cellValue;
+            }
+
+            return cells;
+        }
+
+        private static DataTable BuildPreviewDataTable(string[] orderedColumns, IReadOnlyList<ImportSampleRow> previewRows)
+        {
+            var table = new DataTable();
+            table.Columns.Add("Row", typeof(int));
+
+            foreach (var column in orderedColumns)
+            {
+                table.Columns.Add(column, typeof(string));
+            }
+
+            foreach (var row in previewRows)
+            {
+                var dataRow = table.NewRow();
+                dataRow["Row"] = row.RowIndex;
+
+                foreach (var column in orderedColumns)
+                {
+                    dataRow[column] = row.Cells.TryGetValue(column, out var value) ? value ?? string.Empty : string.Empty;
+                }
+
+                table.Rows.Add(dataRow);
+            }
+
+            return table;
+        }
+
+        private static IReadOnlyList<string> GetSampleValues(IReadOnlyList<ImportSampleRow> sampleRows, string column, int maxCount)
+        {
+            if (maxCount <= 0 || sampleRows.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var values = new List<string>(capacity: maxCount);
+            foreach (var row in sampleRows)
+            {
+                if (values.Count >= maxCount)
+                {
+                    break;
+                }
+
+                if (!row.Cells.TryGetValue(column, out var value) || string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
+
+                values.Add(value.Trim());
+            }
+
+            return values;
+        }
+
+        private static void ApplyAmbiguousIndexHeuristics(List<ImportColumnPreview> columnPreviews)
+        {
+            if (columnPreviews == null || columnPreviews.Count < 2)
+            {
+                return;
+            }
+
+            var hasStrongIndexSuggestion = columnPreviews.Any(c =>
+                (c.SuggestedField == ImportField.CurrentIndex || c.SuggestedField == ImportField.PreviousIndex) &&
+                c.SuggestedScore >= HeaderFieldScoreThreshold);
+
+            if (hasStrongIndexSuggestion)
+            {
+                return;
+            }
+
+            var ambiguous = columnPreviews
+                .Where(c => IsAmbiguousIndexHeader(c.HeaderText))
+                .OrderBy(c => GetColumnIndex(c.ColumnLetter))
+                .Take(2)
+                .ToList();
+
+            if (ambiguous.Count < 2)
+            {
+                return;
+            }
+
+            var left = ambiguous[0];
+            var right = ambiguous[1];
+
+            for (var i = 0; i < columnPreviews.Count; i++)
+            {
+                if (string.Equals(columnPreviews[i].ColumnLetter, left.ColumnLetter, StringComparison.OrdinalIgnoreCase))
+                {
+                    columnPreviews[i] = columnPreviews[i] with
+                    {
+                        SuggestedField = ImportField.PreviousIndex,
+                        SuggestedScore = HeaderFieldScoreThreshold
+                    };
+                }
+
+                if (string.Equals(columnPreviews[i].ColumnLetter, right.ColumnLetter, StringComparison.OrdinalIgnoreCase))
+                {
+                    columnPreviews[i] = columnPreviews[i] with
+                    {
+                        SuggestedField = ImportField.CurrentIndex,
+                        SuggestedScore = HeaderFieldScoreThreshold
+                    };
+                }
+            }
+        }
+
+        private static bool IsAmbiguousIndexHeader(string headerText)
+        {
+            var normalized = NormalizeHeader(headerText);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return false;
+            }
+
+            var hasChiSo = normalized.Contains("chi so", StringComparison.OrdinalIgnoreCase) ||
+                          normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("cs", StringComparer.OrdinalIgnoreCase);
+
+            if (!hasChiSo)
+            {
+                return false;
+            }
+
+            return !ContainsAnyToken(normalized, "moi", "cu", "current", "previous", "start", "end");
+        }
+
+        private static bool ContainsAnyToken(string text, params string[] tokens)
+        {
+            if (string.IsNullOrWhiteSpace(text) || tokens == null || tokens.Length == 0)
+            {
+                return false;
+            }
+
+            var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var token in tokens)
+            {
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    continue;
+                }
+
+                if (parts.Contains(token, StringComparer.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string ComputeHeaderSignature(IEnumerable<string> normalizedHeaders)
+        {
+            var payload = string.Join("|", normalizedHeaders ?? Array.Empty<string>());
+            var bytes = Encoding.UTF8.GetBytes(payload);
+            var hash = SHA256.HashData(bytes);
+            return Convert.ToHexString(hash);
+        }
 
         public static IList<Customer> ImportFromFile(string filePath, out string? warningMessage)
         {
@@ -231,6 +975,7 @@ namespace ElectricCalculation.Services
                 {
                     headerMap = detectedMap;
                     dataStartRowIndex = rowIndex + 1;
+                    warningMessage = AppendWarning(warningMessage, BuildHeaderMissingColumnsWarning(headerMap));
                     continue;
                 }
 
@@ -336,7 +1081,7 @@ namespace ElectricCalculation.Services
             return result;
         }
 
-        private static string? AppendWarning(string? existing, string message)
+        private static string? AppendWarning(string? existing, string? message)
         {
             if (string.IsNullOrWhiteSpace(message))
             {
@@ -411,7 +1156,9 @@ namespace ElectricCalculation.Services
         {
             map = new Dictionary<ImportField, string>();
 
-            foreach (var pair in cells)
+            var bestByField = new Dictionary<ImportField, (string column, double score)>();
+
+            foreach (var pair in cells.OrderBy(pair => GetColumnIndex(pair.Key)))
             {
                 var normalized = NormalizeHeader(pair.Value);
                 if (string.IsNullOrWhiteSpace(normalized))
@@ -419,26 +1166,54 @@ namespace ElectricCalculation.Services
                     continue;
                 }
 
-                var field = GuessField(normalized);
-                if (field == null)
+                var scoredFields = ScoreFields(normalized);
+                if (scoredFields.Count == 0)
                 {
                     continue;
                 }
 
-                if (!map.ContainsKey(field.Value))
+                var best = scoredFields[0];
+                if (best.score < HeaderFieldScoreThreshold)
                 {
-                    map[field.Value] = pair.Key;
+                    continue;
+                }
+
+                if (!bestByField.TryGetValue(best.field, out var current) ||
+                    best.score > current.score ||
+                    (Math.Abs(best.score - current.score) < 0.0001 &&
+                     GetColumnIndex(pair.Key) < GetColumnIndex(current.column)))
+                {
+                    bestByField[best.field] = (pair.Key, best.score);
                 }
             }
 
-            var hasEnoughSignals =
-                map.ContainsKey(ImportField.Name) &&
-                (map.ContainsKey(ImportField.MeterNumber) ||
-                 map.ContainsKey(ImportField.CurrentIndex) ||
-                 map.ContainsKey(ImportField.PreviousIndex) ||
-                 map.ContainsKey(ImportField.UnitPrice));
+            foreach (var pair in bestByField)
+            {
+                map[pair.Key] = pair.Value.column;
+            }
 
-            if (!hasEnoughSignals)
+            var hasRequiredFields = true;
+            foreach (var rule in CompiledFieldRules)
+            {
+                if (!rule.Required)
+                {
+                    continue;
+                }
+
+                if (!map.ContainsKey(rule.Field))
+                {
+                    hasRequiredFields = false;
+                    break;
+                }
+            }
+
+            var hasAnyKeyField =
+                map.ContainsKey(ImportField.MeterNumber) ||
+                map.ContainsKey(ImportField.CurrentIndex) ||
+                map.ContainsKey(ImportField.PreviousIndex) ||
+                map.ContainsKey(ImportField.UnitPrice);
+
+            if (!hasRequiredFields || !hasAnyKeyField)
             {
                 map.Clear();
                 return false;
@@ -454,124 +1229,182 @@ namespace ElectricCalculation.Services
             return true;
         }
 
-        private static ImportField? GuessField(string normalizedHeader)
+        private static string? BuildHeaderMissingColumnsWarning(IDictionary<ImportField, string> headerMap)
         {
-            if (ContainsAny(normalizedHeader, "stt", "so thu tu", "so tt", "no."))
+            var importantFields = new Dictionary<ImportField, string>
             {
-                return ImportField.SequenceNumber;
+                [ImportField.UnitPrice] = "Don gia",
+                [ImportField.Multiplier] = "He so",
+                [ImportField.CurrentIndex] = "Chi so moi",
+                [ImportField.PreviousIndex] = "Chi so cu"
+            };
+
+            var missingLabels = importantFields
+                .Where(pair => !headerMap.ContainsKey(pair.Key))
+                .Select(pair => pair.Value)
+                .ToArray();
+
+            if (missingLabels.Length == 0)
+            {
+                return null;
             }
 
-            if (ContainsAny(normalizedHeader, "ten khach", "khach hang", "ho ten", "ten"))
-            {
-                return ImportField.Name;
-            }
-
-            if (ContainsAny(normalizedHeader, "nhom", "don vi"))
-            {
-                return ImportField.GroupName;
-            }
-
-            if (ContainsAny(normalizedHeader, "loai"))
-            {
-                return ImportField.Category;
-            }
-
-            if (ContainsAny(normalizedHeader, "dia chi", "dc"))
-            {
-                return ImportField.Address;
-            }
-
-            if (ContainsAny(normalizedHeader, "dai dien", "nguoi dai dien"))
-            {
-                return ImportField.RepresentativeName;
-            }
-
-            if (ContainsAny(normalizedHeader, "dt ho", "dien thoai ho", "so dt ho"))
-            {
-                return ImportField.HouseholdPhone;
-            }
-
-            if (ContainsAny(normalizedHeader, "so cong to", "cong to", "meter"))
-            {
-                return ImportField.MeterNumber;
-            }
-
-            if (ContainsAny(normalizedHeader, "vi tri"))
-            {
-                return ImportField.Location;
-            }
-
-            if (ContainsAny(normalizedHeader, "tram", "tba"))
-            {
-                return ImportField.Substation;
-            }
-
-            if (ContainsAny(normalizedHeader, "trang", "page"))
-            {
-                return ImportField.Page;
-            }
-
-            if (ContainsAny(normalizedHeader, "nguoi th", "nguoi thu", "nguoi ghi"))
-            {
-                return ImportField.PerformedBy;
-            }
-
-            if (ContainsAny(normalizedHeader, "chi so", "cs"))
-            {
-                if (normalizedHeader.Contains("moi", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ImportField.CurrentIndex;
-                }
-
-                if (normalizedHeader.Contains("cu", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ImportField.PreviousIndex;
-                }
-            }
-
-            if (ContainsAny(normalizedHeader, "he so", "hs", "multiplier"))
-            {
-                return ImportField.Multiplier;
-            }
-
-            if (ContainsAny(normalizedHeader, "don gia", "gia"))
-            {
-                return ImportField.UnitPrice;
-            }
-
-            if (ContainsAny(normalizedHeader, "bao cap", "tro cap", "mien giam"))
-            {
-                return ImportField.SubsidizedKwh;
-            }
-
-            if (ContainsAny(normalizedHeader, "so dt", "dien thoai", "dt"))
-            {
-                return ImportField.Phone;
-            }
-
-            if (ContainsAny(normalizedHeader, "nha", "toa", "ma so", "book"))
-            {
-                return ImportField.BuildingName;
-            }
-
-            return null;
+            return $"Da nhan dien dong tieu de nhung thieu cot: {string.Join(", ", missingLabels)}.";
         }
 
-        private static bool ContainsAny(string haystack, params string[] needles)
+        private static IReadOnlyList<(ImportField field, double score)> ScoreFields(string normalizedHeader)
         {
-            if (string.IsNullOrWhiteSpace(haystack) || needles == null || needles.Length == 0)
+            if (string.IsNullOrWhiteSpace(normalizedHeader))
             {
-                return false;
+                return Array.Empty<(ImportField field, double score)>();
             }
 
-            foreach (var needle in needles)
+            var header = normalizedHeader.Trim();
+            if (header.Length == 0)
             {
-                if (string.IsNullOrWhiteSpace(needle))
+                return Array.Empty<(ImportField field, double score)>();
+            }
+
+            var headerWords = header.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var headerWordSet = new HashSet<string>(headerWords, StringComparer.OrdinalIgnoreCase);
+
+            var results = new List<(ImportField field, double score, int priority)>();
+
+            foreach (var rule in CompiledFieldRules)
+            {
+                double rawScore = 0;
+
+                foreach (var keyword in rule.Keywords)
+                {
+                    if (string.IsNullOrWhiteSpace(keyword))
+                    {
+                        continue;
+                    }
+
+                    var wordCount = CountWords(keyword);
+
+                    if (IsFullKeywordMatch(header, headerWordSet, keyword))
+                    {
+                        rawScore += 1.0 + 0.15 * Math.Max(0, wordCount - 1);
+                        continue;
+                    }
+
+                    if (IsPartialKeywordMatch(headerWords, keyword))
+                    {
+                        rawScore += 0.45 + 0.08 * Math.Max(0, wordCount - 1);
+                    }
+                }
+
+                if (rawScore <= 0)
                 {
                     continue;
                 }
 
-                if (haystack.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                var normalizedScore = rawScore / (rawScore + 0.5);
+                var score = Math.Min(1.0, normalizedScore + rule.Priority * 0.005);
+
+                results.Add((rule.Field, score, rule.Priority));
+            }
+
+            return results
+                .OrderByDescending(pair => pair.score)
+                .ThenByDescending(pair => pair.priority)
+                .Select(pair => (pair.field, pair.score))
+                .ToArray();
+        }
+
+        private static int GetColumnIndex(string columnLetters)
+        {
+            if (string.IsNullOrWhiteSpace(columnLetters))
+            {
+                return int.MaxValue;
+            }
+
+            var value = 0;
+            foreach (var ch in columnLetters.Trim().ToUpperInvariant())
+            {
+                if (ch < 'A' || ch > 'Z')
+                {
+                    break;
+                }
+
+                value = value * 26 + (ch - 'A' + 1);
+            }
+
+            return value == 0 ? int.MaxValue : value;
+        }
+
+        private static int CountWords(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return 0;
+            }
+
+            return input.Count(ch => ch == ' ') + 1;
+        }
+
+        private static bool IsFullKeywordMatch(string normalizedHeader, HashSet<string> headerWords, string normalizedKeyword)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedHeader) || string.IsNullOrWhiteSpace(normalizedKeyword))
+            {
+                return false;
+            }
+
+            if (normalizedKeyword.IndexOf(' ') < 0)
+            {
+                return headerWords.Contains(normalizedKeyword);
+            }
+
+            if (ContainsPhraseWithWordBoundary(normalizedHeader, normalizedKeyword))
+            {
+                return true;
+            }
+
+            var collapsed = normalizedKeyword.Replace(" ", string.Empty);
+            return !string.IsNullOrWhiteSpace(collapsed) && headerWords.Contains(collapsed);
+        }
+
+        private static bool ContainsPhraseWithWordBoundary(string text, string phrase)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(phrase))
+            {
+                return false;
+            }
+
+            var index = text.IndexOf(phrase, StringComparison.OrdinalIgnoreCase);
+            while (index >= 0)
+            {
+                var startOk = index == 0 || text[index - 1] == ' ';
+                var endIndex = index + phrase.Length;
+                var endOk = endIndex == text.Length || text[endIndex] == ' ';
+
+                if (startOk && endOk)
+                {
+                    return true;
+                }
+
+                index = text.IndexOf(phrase, index + 1, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
+        }
+
+        private static bool IsPartialKeywordMatch(string[] headerWords, string normalizedKeyword)
+        {
+            if (headerWords.Length == 0 || string.IsNullOrWhiteSpace(normalizedKeyword))
+            {
+                return false;
+            }
+
+            foreach (var word in headerWords)
+            {
+                if (word.Length <= normalizedKeyword.Length)
+                {
+                    continue;
+                }
+
+                if (word.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
@@ -668,7 +1501,7 @@ namespace ElectricCalculation.Services
             {
                 return value;
             }
-
+             
             return null;
         }
     }

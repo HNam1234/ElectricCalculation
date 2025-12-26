@@ -195,6 +195,18 @@ namespace ElectricCalculation.Services
             return dialog.ShowDialog() == true ? vm.BuildSettings() : null;
         }
 
+        public ImportWizardViewModel? ShowImportWizardDialog(string filePath)
+        {
+            var vm = new ImportWizardViewModel(filePath);
+            var dialog = new ImportWizardWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            return dialog.ShowDialog() == true ? vm : null;
+        }
+
         public void OpenWithDefaultApp(string path)
         {
             var info = new ProcessStartInfo(path)

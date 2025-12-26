@@ -1,0 +1,182 @@
+<Window x:Class="ElectricCalculation.Views.ImportMappingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        mc:Ignorable="d"
+        Title="Import Excel"
+        Width="1100"
+        Height="720"
+        WindowStartupLocation="CenterOwner"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="{Binding FilePath}"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="{Binding PreviewWarningMessage}"
+                       Foreground="DarkOrange"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,12,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Text="Sheet"
+                       VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding SheetNames}"
+                      SelectedItem="{Binding SelectedSheetName, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+
+            <TextBlock Grid.Column="3"
+                       Text="Profile"
+                       VerticalAlignment="Center" />
+            <TextBox Grid.Column="4"
+                     Text="{Binding ProfileName, UpdateSourceTrigger=PropertyChanged}"
+                     VerticalAlignment="Center" />
+
+            <CheckBox Grid.Column="6"
+                      Content="Save mapping"
+                      IsChecked="{Binding SaveProfile, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <GroupBox Header="Preview (10 rows)" Grid.Column="0">
+                <DataGrid ItemsSource="{Binding PreviewView}"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="All"
+                          RowHeaderWidth="0" />
+            </GroupBox>
+
+            <GroupBox Header="Mapping" Grid.Column="2">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <DataGrid Grid.Row="0"
+                              ItemsSource="{Binding ColumnMappings}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="All">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Col" Binding="{Binding ColumnLetter}" Width="60" IsReadOnly="True" />
+
+                            <DataGridTemplateColumn Header="Header" Width="220" IsReadOnly="True">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding HeaderText}" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Sample values" Width="260" IsReadOnly="True">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding SampleValuesText}" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTextColumn Header="Suggested" Binding="{Binding SuggestedDisplay}" Width="160" IsReadOnly="True" />
+
+                            <DataGridTemplateColumn Header="Target field" Width="200">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{Binding DataContext.TargetFieldOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  SelectedValue="{Binding TargetField, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValuePath="Field"
+                                                  DisplayMemberPath="Display"
+                                                  MinWidth="160" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <GroupBox Header="Errors" Grid.Column="0">
+                            <ItemsControl ItemsSource="{Binding Errors}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="DarkRed" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </GroupBox>
+
+                        <GroupBox Header="Warnings" Grid.Column="2">
+                            <ItemsControl ItemsSource="{Binding Warnings}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="DarkOrange" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </GroupBox>
+                    </Grid>
+                </Grid>
+            </GroupBox>
+        </Grid>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,14,0,0">
+            <Button Content="Auto-map lại"
+                    Width="110"
+                    Margin="0,0,10,0"
+                    Command="{Binding AutoMapAgainCommand}" />
+            <Button Content="Validate"
+                    Width="90"
+                    Margin="0,0,10,0"
+                    Command="{Binding ValidateCommand}" />
+            <Button Content="Import"
+                    Width="90"
+                    Margin="0,0,10,0"
+                    IsDefault="True"
+                    Command="{Binding ImportCommand}" />
+            <Button Content="Cancel"
+                    Width="90"
+                    IsCancel="True"
+                    Command="{Binding CancelCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>

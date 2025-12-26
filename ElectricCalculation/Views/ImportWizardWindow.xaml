@@ -1,0 +1,526 @@
+<Window x:Class="ElectricCalculation.Views.ImportWizardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        mc:Ignorable="d"
+        Title="Nhập dữ liệu từ Excel"
+        Width="1180"
+        Height="780"
+        WindowStartupLocation="CenterOwner"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <SolidColorBrush x:Key="CardBg" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="CardBorder" Color="#FFE5E7EB" />
+        <SolidColorBrush x:Key="TextPrimary" Color="#FF111827" />
+        <SolidColorBrush x:Key="TextSecondary" Color="#FF4B5563" />
+        <SolidColorBrush x:Key="TextMuted" Color="#FF6B7280" />
+
+        <DataTemplate x:Key="MappingRowTemplate">
+            <Border Padding="10"
+                    Margin="0,0,0,10"
+                    CornerRadius="10"
+                    Background="{StaticResource CardBg}"
+                    BorderBrush="{StaticResource CardBorder}"
+                    BorderThickness="1">
+                <Border.Style>
+                    <Style TargetType="{x:Type Border}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsConflict}" Value="True">
+                                <Setter Property="BorderBrush" Value="DarkRed" />
+                                <Setter Property="Background" Value="#FFFFF1F2" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                                <Setter Property="BorderBrush" Value="DarkRed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="320" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock Text="{Binding Label}"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Hint}"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <ComboBox Grid.Column="1"
+                              Margin="0,0,10,0"
+                              ItemsSource="{Binding Options}"
+                              SelectedValue="{Binding SelectedColumn, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              SelectedValuePath="ColumnLetter"
+                              DisplayMemberPath="DisplayName"
+                              IsEnabled="{Binding IsEditable}"
+                              ToolTip="Bạn chọn cột trong Excel tương ứng với trường này." />
+
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding SamplePreview}"
+                               Foreground="{StaticResource TextSecondary}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0" />
+
+                    <Border Grid.Column="3"
+                            Padding="8,4"
+                            CornerRadius="10"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center">
+                        <Border.Style>
+                            <Style TargetType="{x:Type Border}">
+                                <Setter Property="Background" Value="#FFF3F4F6" />
+                                <Setter Property="BorderBrush" Value="#FFE5E7EB" />
+                                <Setter Property="BorderThickness" Value="1" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ConfidenceLevel}" Value="High">
+                                        <Setter Property="Background" Value="#FFD1FAE5" />
+                                        <Setter Property="BorderBrush" Value="#FF6EE7B7" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ConfidenceLevel}" Value="Medium">
+                                        <Setter Property="Background" Value="#FFDBEAFE" />
+                                        <Setter Property="BorderBrush" Value="#FF93C5FD" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ConfidenceLevel}" Value="Low">
+                                        <Setter Property="Background" Value="#FFFEF3C7" />
+                                        <Setter Property="BorderBrush" Value="#FFFCD34D" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding ConfidenceText}"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold" />
+                    </Border>
+
+                    <Button Grid.Column="4"
+                            Margin="10,0,0,0"
+                            Padding="10,4"
+                            Content="Sửa"
+                            Command="{Binding DataContext.EditFieldCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                            CommandParameter="{Binding}"
+                            Visibility="{Binding IsLocked, Converter={StaticResource BoolToVis}}"
+                            ToolTip="Bấm để mở khóa và chỉnh cột." />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Nhập dữ liệu từ Excel"
+                       Foreground="{StaticResource TextPrimary}"
+                       FontSize="22"
+                       FontWeight="SemiBold" />
+            <TextBlock Text="{Binding FilePath}"
+                       Foreground="{StaticResource TextMuted}"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="{Binding PreviewWarningMessage}"
+                       Foreground="DarkOrange"
+                       Margin="0,6,0,0"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <TabControl Grid.Row="1"
+                    Margin="0,14,0,0"
+                    SelectedIndex="{Binding CurrentStep, Mode=TwoWay}">
+            <TabItem Header="1) Chọn sheet">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="360" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="Sheet:"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimary}" />
+                        <ComboBox Grid.Column="1"
+                                  Margin="10,0,0,0"
+                                  ItemsSource="{Binding SheetNames}"
+                                  SelectedItem="{Binding SelectedSheetName, Mode=TwoWay}"
+                                  VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Column="2"
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextMuted}"
+                                   Text="Xem trước 10 dòng đầu để kiểm tra đúng sheet." />
+                    </Grid>
+
+                    <Border Grid.Row="1"
+                            Margin="0,12,0,0"
+                            CornerRadius="12"
+                            Background="{StaticResource CardBg}"
+                            BorderBrush="{StaticResource CardBorder}"
+                            BorderThickness="1">
+                        <DataGrid ItemsSource="{Binding PreviewView}"
+                                  AutoGenerateColumns="True"
+                                  IsReadOnly="True"
+                                  CanUserAddRows="False"
+                                  HeadersVisibility="Column"
+                                  GridLinesVisibility="All"
+                                  RowHeaderWidth="0"
+                                  Margin="8" />
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="2) Ghép cột">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="360" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="Preset:"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimary}" />
+                        <ComboBox Grid.Column="1"
+                                  Margin="10,0,0,0"
+                                  ItemsSource="{Binding PresetOptions}"
+                                  SelectedItem="{Binding SelectedPreset, Mode=TwoWay}"
+                                  DisplayMemberPath="DisplayName"
+                                  VerticalAlignment="Center" />
+                        <Button Grid.Column="2"
+                                Content="Tự động mapping"
+                                Margin="10,0,0,0"
+                                Padding="10,4"
+                                Command="{Binding ResetToAutoCommand}"
+                                VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3"
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="#FF047857"
+                                   Text="{Binding PresetToastMessage}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding HasPresetToast, Converter={StaticResource BoolToVis}}" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  Margin="0,12,0,0"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="Chỉ cần ghép các cột quan trọng. Phần nâng cao có thể bỏ qua."
+                                       Foreground="{StaticResource TextMuted}"
+                                       Margin="0,0,0,10"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="Mẹo: Trường có gợi ý “Rất chắc” sẽ được khóa. Bấm “Sửa” nếu bạn muốn đổi."
+                                       Foreground="{StaticResource TextMuted}"
+                                       Margin="0,0,0,10"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="Cột quan trọng"
+                                       Foreground="{StaticResource TextPrimary}"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,8" />
+                            <ItemsControl ItemsSource="{Binding ImportantFieldMappings}"
+                                          ItemTemplate="{StaticResource MappingRowTemplate}" />
+
+                            <Expander Header="Cột khác (nâng cao)"
+                                      IsExpanded="False"
+                                      Margin="0,8,0,0">
+                                <ItemsControl ItemsSource="{Binding OptionalFieldMappings}"
+                                              ItemTemplate="{StaticResource MappingRowTemplate}" />
+                            </Expander>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="3) Kiểm tra &amp; nhập">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0"
+                            Padding="10"
+                            CornerRadius="12"
+                            Background="{StaticResource CardBg}"
+                            BorderBrush="{StaticResource CardBorder}"
+                            BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ProgressBar Width="170"
+                                         Height="12"
+                                         IsIndeterminate="True"
+                                         Visibility="{Binding IsImporting, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding ImportStatusText}"
+                                       Margin="10,0,0,0"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="14" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                Padding="10"
+                                CornerRadius="12"
+                                Background="{StaticResource CardBg}"
+                                BorderBrush="{StaticResource CardBorder}"
+                                BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Lỗi (cần sửa)"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontWeight="SemiBold" />
+                                <ItemsControl ItemsSource="{Binding ErrorMessages}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}"
+                                                       Margin="0,6,0,0"
+                                                       Foreground="DarkRed"
+                                                       TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Không có lỗi."
+                                           Margin="0,6,0,0"
+                                           Foreground="{StaticResource TextMuted}"
+                                           Visibility="{Binding HasNoErrors, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2"
+                                Padding="10"
+                                CornerRadius="12"
+                                Background="{StaticResource CardBg}"
+                                BorderBrush="{StaticResource CardBorder}"
+                                BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Cảnh báo (vẫn nhập được)"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontWeight="SemiBold" />
+                                <ItemsControl ItemsSource="{Binding WarningMessages}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}"
+                                                       Margin="0,6,0,0"
+                                                       Foreground="DarkOrange"
+                                                       TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Không có cảnh báo."
+                                           Margin="0,6,0,0"
+                                           Foreground="{StaticResource TextMuted}"
+                                           Visibility="{Binding HasNoWarnings, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2"
+                            Margin="0,12,0,0"
+                            Padding="10"
+                            CornerRadius="12"
+                            Background="{StaticResource CardBg}"
+                            BorderBrush="{StaticResource CardBorder}"
+                            BorderThickness="1"
+                            Visibility="{Binding HasImportResult, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Kết quả import"
+                                       Foreground="{StaticResource TextPrimary}"
+                                       FontWeight="SemiBold" />
+
+                            <Grid Grid.Row="1" Margin="0,8,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="20" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="20" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="20" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="Tổng:"
+                                           Foreground="{StaticResource TextMuted}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding ReportTotalRows}"
+                                           Margin="6,0,0,0"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Column="3"
+                                           Text="Nhập:"
+                                           Foreground="{StaticResource TextMuted}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="4"
+                                           Text="{Binding ReportImportedRows}"
+                                           Margin="6,0,0,0"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Column="6"
+                                           Text="Bỏ qua:"
+                                           Foreground="{StaticResource TextMuted}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="7"
+                                           Text="{Binding ReportSkippedRows}"
+                                           Margin="6,0,0,0"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Column="9"
+                                           Text="Cảnh báo:"
+                                           Foreground="{StaticResource TextMuted}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="10"
+                                           Text="{Binding ReportWarningCount}"
+                                           Margin="6,0,0,0"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <DataGrid Grid.Row="2"
+                                      ItemsSource="{Binding ImportWarningsTop}"
+                                      AutoGenerateColumns="False"
+                                      CanUserAddRows="False"
+                                      IsReadOnly="True"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="All"
+                                      RowHeaderWidth="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Cảnh báo (tối đa 100)"
+                                                        Binding="{Binding}"
+                                                        Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <CheckBox Content="Lưu preset mapping cho lần sau"
+                          IsChecked="{Binding SavePreset, Mode=TwoWay}"
+                          IsEnabled="{Binding CanSavePreset}"
+                          VerticalAlignment="Center"
+                          Visibility="{Binding IsStep3, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Text="Tên preset:"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextMuted}"
+                           Visibility="{Binding IsStep3, Converter={StaticResource BoolToVis}}" />
+                <TextBox Width="260"
+                         Margin="8,0,0,0"
+                         VerticalAlignment="Center"
+                         Text="{Binding PresetName, UpdateSourceTrigger=PropertyChanged}"
+                         IsEnabled="{Binding SavePreset}"
+                         Visibility="{Binding IsStep3, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button Content="Quay lại"
+                        Width="100"
+                        Margin="0,0,10,0"
+                        Command="{Binding BackCommand}"
+                        IsEnabled="{Binding CanGoBack}" />
+
+                <Button Content="Tiếp"
+                        Width="100"
+                        Margin="0,0,10,0"
+                        Command="{Binding NextCommand}"
+                        Visibility="{Binding IsNotStep3, Converter={StaticResource BoolToVis}}"
+                        IsEnabled="{Binding CanGoNext}" />
+
+                <Button Content="Kiểm tra"
+                        Width="100"
+                        Margin="0,0,10,0"
+                        Command="{Binding ValidateCommand}"
+                        Visibility="{Binding IsStep3, Converter={StaticResource BoolToVis}}" />
+
+                <Button Content="Nhập dữ liệu"
+                        Width="110"
+                        Margin="0,0,10,0"
+                        IsDefault="True"
+                        Command="{Binding ImportCommand}"
+                        IsEnabled="{Binding CanImport}"
+                        Visibility="{Binding IsStep3, Converter={StaticResource BoolToVis}}" />
+
+                <Button Content="Hoàn tất"
+                        Width="100"
+                        Margin="0,0,10,0"
+                        Command="{Binding FinishCommand}"
+                        IsEnabled="{Binding CanFinish}"
+                        Visibility="{Binding IsStep3, Converter={StaticResource BoolToVis}}" />
+
+                <Button Content="Hủy"
+                        Width="90"
+                        IsCancel="True"
+                        Command="{Binding CancelCommand}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
