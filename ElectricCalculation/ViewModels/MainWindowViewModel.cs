@@ -56,7 +56,7 @@ namespace ElectricCalculation.ViewModels
         private bool isFastEntryMode = true;
 
         [ObservableProperty]
-        private bool isRouteEntryMode = true;
+        private bool isRouteEntryMode = false;
 
         [ObservableProperty]
         private bool filterMissing;
@@ -521,7 +521,7 @@ namespace ElectricCalculation.ViewModels
             }
 
             var s = settings ?? new AppSettings();
-            var overwrite = true;
+            var overwrite = s.OverrideExistingValues;
 
             if (overwrite || customer.UnitPrice <= 0)
             {

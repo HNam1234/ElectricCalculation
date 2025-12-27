@@ -526,10 +526,8 @@ namespace ElectricCalculation.Services
 
                 UpdateTextCell(sheetDataElement, mainNs, "H39", dateText);
 
-                if (!string.IsNullOrWhiteSpace(issuerName))
-                {
-                    UpdateTextCell(sheetDataElement, mainNs, "H44", issuerName.Trim());
-                }
+                var issuer = issuerName?.Trim() ?? string.Empty;
+                UpdateTextCell(sheetDataElement, mainNs, "H44", issuer);
 
                 using (var sheetStream = sheetEntry.Open())
                 {

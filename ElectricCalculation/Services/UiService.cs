@@ -197,7 +197,7 @@ namespace ElectricCalculation.Services
 
         public ImportWizardViewModel? ShowImportWizardDialog(string filePath)
         {
-            var vm = new ImportWizardViewModel(filePath);
+            var vm = new ImportWizardViewModel(this, filePath);
             var dialog = new ImportWizardWindow
             {
                 Owner = GetOwner(),
@@ -205,6 +205,18 @@ namespace ElectricCalculation.Services
             };
 
             return dialog.ShowDialog() == true ? vm : null;
+        }
+
+        public NewDatasetCreationOption? ShowNewDatasetOptionsDialog()
+        {
+            var vm = new NewDatasetOptionsViewModel();
+            var dialog = new NewDatasetOptionsWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            return dialog.ShowDialog() == true ? vm.SelectedOption : null;
         }
 
         public void OpenWithDefaultApp(string path)

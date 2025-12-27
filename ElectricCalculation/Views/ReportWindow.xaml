@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
         xmlns:converters="clr-namespace:ElectricCalculation.Converters"
+        xmlns:sys="clr-namespace:System.Windows;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="{Binding Title}"
         Height="540"
@@ -13,7 +14,8 @@
         behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-        <converters:RatioToHeightConverter x:Key="RatioToHeightConverter" />
+        <converters:RatioToLengthConverter x:Key="RatioToLengthConverter" />
+        <converters:DoubleToRightThicknessConverter x:Key="ScrollBarWidthToRightMargin" />
     </Window.Resources>
 
     <Grid Margin="12">
@@ -72,131 +74,96 @@
                     <!-- Two overlapped charts; toggled via Visibility -->
                     <Grid>
                         <!-- kWh chart -->
-                        <Border BorderBrush="LightGray"
-                                BorderThickness="1"
-                                Visibility="{Binding ShowKwh, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                          VerticalScrollBarVisibility="Disabled">
-                                <Grid Margin="4">
-                                    <Grid.ColumnDefinitions>
-                                        <!-- Y-axis labels -->
-                                        <ColumnDefinition Width="60" />
-                                        <!-- Plot area -->
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <!-- Bars + axes -->
-                                        <RowDefinition Height="*" />
-                                        <!-- X-axis labels -->
-                                        <RowDefinition Height="160" />
-                                    </Grid.RowDefinitions>
+                         <Border BorderBrush="LightGray"
+                                 BorderThickness="1"
+                                 Visibility="{Binding ShowKwh, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid Margin="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="90" />
+                                </Grid.ColumnDefinitions>
 
-                                    <!-- kWh Y-axis -->
-                                    <Grid Grid.Row="0"
-                                          Grid.Column="0"
-                                          Margin="0,0,4,16">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                        </Grid.RowDefinitions>
-
-                                        <TextBlock Grid.Row="0"
-                                                   Text="{Binding KwhTick100}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="1"
-                                                   Text="{Binding KwhTick75}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="2"
-                                                   Text="{Binding KwhTick50}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="3"
-                                                   Text="{Binding KwhTick25}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.RowSpan="4"
-                                                   Text="{Binding KwhTick0}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Bottom"
-                                                   Margin="0,0,2,-2" />
+                                <!-- X-axis ticks -->
+                                <Border Grid.Row="0" Grid.Column="1" Margin="0,0,0,8">
+                                    <Grid Margin="{Binding Source={x:Static sys:SystemParameters.VerticalScrollBarWidth}, Converter={StaticResource ScrollBarWidthToRightMargin}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding KwhTick0}" FontSize="9" HorizontalAlignment="Left" />
+                                        <TextBlock Grid.Column="0" Text="{Binding KwhTick25}" FontSize="9" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Column="1" Text="{Binding KwhTick50}" FontSize="9" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Column="2" Text="{Binding KwhTick75}" FontSize="9" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Column="3" Text="{Binding KwhTick100}" FontSize="9" HorizontalAlignment="Right" />
                                     </Grid>
+                                </Border>
 
-                                    <!-- kWh bar area -->
-                                    <Grid Grid.Row="0"
-                                          Grid.Column="1"
-                                          Margin="0,0,0,16">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                        </Grid.RowDefinitions>
+                                <!-- Bars -->
+                                <ScrollViewer Grid.Row="1"
+                                              Grid.ColumnSpan="3"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Items}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Vertical" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,3">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="220" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="90" />
+                                                    </Grid.ColumnDefinitions>
 
-                                        <!-- Grid lines -->
-                                        <Border Grid.Row="0"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="1"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="2"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="3"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.RowSpan="4"
-                                                BorderBrush="#FFB0B0B0"
-                                                BorderThickness="0,0,0,1" />
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding GroupName}"
+                                                               FontSize="11"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding GroupName}"
+                                                               VerticalAlignment="Center" />
 
-                                        <!-- Y-axis -->
-                                        <Border Grid.RowSpan="4"
-                                                HorizontalAlignment="Left"
-                                                BorderBrush="#FF808080"
-                                                BorderThickness="1,0,0,0" />
+                                                    <Grid Grid.Column="1"
+                                                          x:Name="PlotArea"
+                                                          Height="22"
+                                                          VerticalAlignment="Center">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
 
-                                        <!-- Bars -->
-                                        <ItemsControl Grid.RowSpan="4"
-                                                      Margin="6,0,0,0"
-                                                      ItemsSource="{Binding Items}"
-                                                      VerticalAlignment="Stretch">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Horizontal"
-                                                                VerticalAlignment="Stretch" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Grid Margin="2,0"
-                                                          Width="16"
-                                                          Height="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=ActualHeight}">
-                                                        <Border VerticalAlignment="Bottom">
-                                                            <Border.Height>
-                                                                <MultiBinding Converter="{StaticResource RatioToHeightConverter}">
+                                                        <Border Grid.Column="1" BorderBrush="#FFE5E7EB" BorderThickness="1,0,0,0" />
+                                                        <Border Grid.Column="2" BorderBrush="#FFE5E7EB" BorderThickness="1,0,0,0" />
+                                                        <Border Grid.Column="3" BorderBrush="#FFE5E7EB" BorderThickness="1,0,0,0" />
+                                                        <Border Grid.ColumnSpan="4" BorderBrush="#FFE5E7EB" BorderThickness="0,0,1,0" />
+
+                                                        <Border Grid.ColumnSpan="4"
+                                                                HorizontalAlignment="Left"
+                                                                Height="16"
+                                                                VerticalAlignment="Center"
+                                                                ToolTip="{Binding TotalConsumption, StringFormat=N0}">
+                                                            <Border.Width>
+                                                                <MultiBinding Converter="{StaticResource RatioToLengthConverter}">
                                                                     <Binding Path="KwhBarRatio" />
-                                                                    <Binding RelativeSource="{RelativeSource AncestorType=ItemsControl}" Path="ActualHeight" />
+                                                                    <Binding ElementName="PlotArea" Path="ActualWidth" />
                                                                 </MultiBinding>
-                                                            </Border.Height>
+                                                            </Border.Width>
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
                                                                     <Setter Property="Background" Value="SteelBlue" />
                                                                     <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsSelected}"
-                                                                                     Value="True">
+                                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                                             <Setter Property="Background" Value="Red" />
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
@@ -204,163 +171,111 @@
                                                             </Border.Style>
                                                         </Border>
                                                     </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </Grid>
 
-                                    <!-- X-axis labels: group/unit -->
-                                    <ItemsControl Grid.Row="1"
-                                                  Grid.Column="1"
-                                                  Margin="6,0,0,0"
-                                                  ItemsSource="{Binding Items}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Width="16"
-                                                        Height="150"
-                                                        Margin="2,2,2,0"
-                                                        ClipToBounds="True">
-                                                    <TextBlock Text="{Binding GroupName}"
-                                                               FontSize="9"
-                                                               TextWrapping="NoWrap"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding GroupName}">
-                                                        <TextBlock.LayoutTransform>
-                                                            <RotateTransform Angle="-90" />
-                                                        </TextBlock.LayoutTransform>
-                                                    </TextBlock>
-                                                </Border>
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding TotalConsumption, StringFormat=N0}"
+                                                               HorizontalAlignment="Right"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="11" />
+                                                </Grid>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                </Grid>
-                            </ScrollViewer>
+                                </ScrollViewer>
+                            </Grid>
                         </Border>
 
                         <!-- Amount chart -->
-                        <Border BorderBrush="LightGray"
-                                BorderThickness="1"
-                                Visibility="{Binding ShowAmount, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                          VerticalScrollBarVisibility="Disabled">
-                                <Grid Margin="4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="60" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="160" />
-                                    </Grid.RowDefinitions>
+                         <Border BorderBrush="LightGray"
+                                 BorderThickness="1"
+                                 Visibility="{Binding ShowAmount, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid Margin="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="110" />
+                                </Grid.ColumnDefinitions>
 
-                                    <!-- Amount Y-axis -->
-                                    <Grid Grid.Row="0"
-                                          Grid.Column="0"
-                                          Margin="0,0,4,16">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                        </Grid.RowDefinitions>
-
-                                        <TextBlock Grid.Row="0"
-                                                   Text="{Binding AmountTick100}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="1"
-                                                   Text="{Binding AmountTick75}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="2"
-                                                   Text="{Binding AmountTick50}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.Row="3"
-                                                   Text="{Binding AmountTick25}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top"
-                                                   Margin="0,-4,2,0" />
-                                        <TextBlock Grid.RowSpan="4"
-                                                   Text="{Binding AmountTick0}"
-                                                   FontSize="9"
-                                                   HorizontalAlignment="Right"
-                                                   VerticalAlignment="Bottom"
-                                                   Margin="0,0,2,-2" />
+                                <!-- X-axis ticks -->
+                                <Border Grid.Row="0" Grid.Column="1" Margin="0,0,0,8">
+                                    <Grid Margin="{Binding Source={x:Static sys:SystemParameters.VerticalScrollBarWidth}, Converter={StaticResource ScrollBarWidthToRightMargin}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding AmountTick0}" FontSize="9" HorizontalAlignment="Left" />
+                                        <TextBlock Grid.Column="0" Text="{Binding AmountTick25}" FontSize="9" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Column="1" Text="{Binding AmountTick50}" FontSize="9" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Column="2" Text="{Binding AmountTick75}" FontSize="9" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Column="3" Text="{Binding AmountTick100}" FontSize="9" HorizontalAlignment="Right" />
                                     </Grid>
+                                </Border>
 
-                                    <!-- Amount bar area -->
-                                    <Grid Grid.Row="0"
-                                          Grid.Column="1"
-                                          Margin="0,0,0,16">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
-                                        </Grid.RowDefinitions>
+                                <!-- Bars -->
+                                <ScrollViewer Grid.Row="1"
+                                              Grid.ColumnSpan="3"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Items}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Vertical" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,3">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="220" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="110" />
+                                                    </Grid.ColumnDefinitions>
 
-                                        <Border Grid.Row="0"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="1"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="2"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.Row="3"
-                                                BorderBrush="#FFE0E0E0"
-                                                BorderThickness="0,1,0,0" />
-                                        <Border Grid.RowSpan="4"
-                                                BorderBrush="#FFB0B0B0"
-                                                BorderThickness="0,0,0,1" />
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding GroupName}"
+                                                               FontSize="11"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding GroupName}"
+                                                               VerticalAlignment="Center" />
 
-                                        <Border Grid.RowSpan="4"
-                                                HorizontalAlignment="Left"
-                                                BorderBrush="#FF808080"
-                                                BorderThickness="1,0,0,0" />
+                                                    <Grid Grid.Column="1"
+                                                          x:Name="PlotArea"
+                                                          Height="22"
+                                                          VerticalAlignment="Center">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
 
-                                        <ItemsControl Grid.RowSpan="4"
-                                                      Margin="6,0,0,0"
-                                                      ItemsSource="{Binding Items}"
-                                                      VerticalAlignment="Stretch">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Horizontal"
-                                                                VerticalAlignment="Stretch" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Grid Margin="2,0"
-                                                          Width="16"
-                                                          Height="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=ActualHeight}">
-                                                        <Border VerticalAlignment="Bottom">
-                                                            <Border.Height>
-                                                                <MultiBinding Converter="{StaticResource RatioToHeightConverter}">
+                                                        <Border Grid.Column="1" BorderBrush="#FFE5E7EB" BorderThickness="1,0,0,0" />
+                                                        <Border Grid.Column="2" BorderBrush="#FFE5E7EB" BorderThickness="1,0,0,0" />
+                                                        <Border Grid.Column="3" BorderBrush="#FFE5E7EB" BorderThickness="1,0,0,0" />
+                                                        <Border Grid.ColumnSpan="4" BorderBrush="#FFE5E7EB" BorderThickness="0,0,1,0" />
+
+                                                        <Border Grid.ColumnSpan="4"
+                                                                HorizontalAlignment="Left"
+                                                                Height="16"
+                                                                VerticalAlignment="Center"
+                                                                ToolTip="{Binding TotalAmount, StringFormat=N0}">
+                                                            <Border.Width>
+                                                                <MultiBinding Converter="{StaticResource RatioToLengthConverter}">
                                                                     <Binding Path="AmountBarRatio" />
-                                                                    <Binding RelativeSource="{RelativeSource AncestorType=ItemsControl}" Path="ActualHeight" />
+                                                                    <Binding ElementName="PlotArea" Path="ActualWidth" />
                                                                 </MultiBinding>
-                                                            </Border.Height>
+                                                            </Border.Width>
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
                                                                     <Setter Property="Background" Value="SteelBlue" />
                                                                     <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsSelected}"
-                                                                                     Value="True">
+                                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                                             <Setter Property="Background" Value="Red" />
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
@@ -368,42 +283,18 @@
                                                             </Border.Style>
                                                         </Border>
                                                     </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </Grid>
 
-                                    <!-- X-axis labels -->
-                                    <ItemsControl Grid.Row="1"
-                                                  Grid.Column="1"
-                                                  Margin="6,0,0,0"
-                                                  ItemsSource="{Binding Items}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Width="16"
-                                                        Height="150"
-                                                        Margin="2,2,2,0"
-                                                        ClipToBounds="True">
-                                                    <TextBlock Text="{Binding GroupName}"
-                                                               FontSize="9"
-                                                               TextWrapping="NoWrap"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding GroupName}">
-                                                        <TextBlock.LayoutTransform>
-                                                            <RotateTransform Angle="-90" />
-                                                        </TextBlock.LayoutTransform>
-                                                    </TextBlock>
-                                                </Border>
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding TotalAmount, StringFormat=N0}"
+                                                               HorizontalAlignment="Right"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="11" />
+                                                </Grid>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                </Grid>
-                            </ScrollViewer>
+                                </ScrollViewer>
+                            </Grid>
                         </Border>
                     </Grid>
                 </Grid>

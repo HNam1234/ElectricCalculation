@@ -136,6 +136,11 @@
             </Setter>
         </Style>
 
+        <Style x:Key="GridCellTextWithTooltipStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}" />
+        </Style>
+
         <Style x:Key="FilterToggleButtonStyle" TargetType="{x:Type ToggleButton}">
             <Setter Property="MinWidth" Value="72" />
             <Setter Property="Height" Value="30" />
@@ -370,7 +375,7 @@
                   IsReadOnly="False"
                   CanUserReorderColumns="True"
                   CanUserResizeColumns="True"
-                  MinColumnWidth="70"
+                  MinColumnWidth="40"
                   ColumnHeaderHeight="34"
                   FrozenColumnCount="2"
                   EnableRowVirtualization="True"
@@ -459,18 +464,19 @@
                 <DataGridTextColumn Header="Số phiếu"
                                     Binding="{Binding SequenceNumber, UpdateSourceTrigger=PropertyChanged}"
                                     IsReadOnly="True"
-                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="78"
                                     MinWidth="78" />
                 <DataGridTextColumn Header="Tên khách"
                                     Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                    ElementStyle="{StaticResource GridCellTextWithTooltipStyle}"
                                     Width="2*"
-                                    MinWidth="220" />
+                                    MinWidth="120" />
                 <DataGridTextColumn Header="Nhóm / Đơn vị"
                                     Binding="{Binding GroupName, UpdateSourceTrigger=PropertyChanged}"
                                     Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
+                                    ElementStyle="{StaticResource GridCellTextWithTooltipStyle}"
                                     Width="1.2*"
-                                    MinWidth="180" />
+                                    MinWidth="120" />
                 <DataGridTextColumn Header="Loại"
                                     Binding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"
                                     Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
@@ -478,8 +484,9 @@
                 <DataGridTextColumn Header="Địa chỉ"
                                     Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}"
                                     Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
+                                    ElementStyle="{StaticResource GridCellTextWithTooltipStyle}"
                                     Width="2.2*"
-                                    MinWidth="260" />
+                                    MinWidth="150" />
                 <DataGridTextColumn Header="SĐT hộ"
                                     Binding="{Binding HouseholdPhone, UpdateSourceTrigger=PropertyChanged}"
                                     Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
@@ -487,6 +494,7 @@
                 <DataGridTextColumn Header="Đại diện"
                                     Binding="{Binding RepresentativeName, UpdateSourceTrigger=PropertyChanged}"
                                     Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
+                                    ElementStyle="{StaticResource GridCellTextWithTooltipStyle}"
                                     Width="160" />
                 <DataGridTextColumn Header="SĐT"
                                     Binding="{Binding Phone, UpdateSourceTrigger=PropertyChanged}"
@@ -498,10 +506,10 @@
                                     Width="110" />
                 <DataGridTextColumn Header="Công tơ"
                                     Binding="{Binding MeterNumber, UpdateSourceTrigger=PropertyChanged}"
-                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="110" />
                 <DataGridTextColumn Header="Vị trí"
                                     Binding="{Binding Location, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{Binding Data.IsDetailMode, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVisibility}}"
                                     Width="100" />
                 <DataGridTextColumn Header="TBA"
                                     Binding="{Binding Substation, UpdateSourceTrigger=PropertyChanged}"

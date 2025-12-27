@@ -270,10 +270,7 @@ namespace ElectricCalculation.Services
                 "H21",
                 $"Hà Nội, ngày {DateTime.Now.Day} tháng {DateTime.Now.Month} năm {DateTime.Now.Year}");
 
-            if (!string.IsNullOrWhiteSpace(issuer))
-            {
-                UpdateTextCell(sheetDataElement, mainNs, "H27", issuer);
-            }
+            UpdateTextCell(sheetDataElement, mainNs, "H27", issuer);
 
             using (var sheetWriteStream = sheetEntry.Open())
             {

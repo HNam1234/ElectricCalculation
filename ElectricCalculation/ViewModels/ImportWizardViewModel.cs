@@ -18,9 +18,11 @@ namespace ElectricCalculation.ViewModels
 {
     public sealed partial class ImportWizardViewModel : ObservableObject
     {
-        private readonly string filePath;
+        private readonly UiService ui;
         private ImportPreviewResult preview;
         private bool suppressSheetReload;
+        private bool suppressHeaderReload;
+        private bool suppressFieldMappingSync;
 
         private IReadOnlyList<FieldOption> fieldOptions = Array.Empty<FieldOption>();
         private IReadOnlyDictionary<string, ColumnMappingViewModel> columnMappingsByLetter =
@@ -29,15 +31,20 @@ namespace ElectricCalculation.ViewModels
         private List<Customer> importedCustomers = new();
         private ImportRunReport? importReport;
 
-        public ImportWizardViewModel(string filePath)
+        [ObservableProperty]
+        private string filePath = string.Empty;
+
+        [ObservableProperty]
+        private int headerRowNumber = 1;
+
+        public ImportWizardViewModel(UiService ui, string filePath)
         {
-            this.filePath = filePath ?? string.Empty;
-            preview = ExcelImportService.BuildPreview(this.filePath);
+            this.ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            FilePath = filePath ?? string.Empty;
+            preview = ExcelImportService.BuildPreview(FilePath);
             LoadPreview(preview);
             CurrentStep = 0;
         }
-
-        public string FilePath => filePath;
 
         public IReadOnlyList<Customer> ImportedCustomers => importedCustomers;
 
@@ -91,6 +98,12 @@ namespace ElectricCalculation.ViewModels
 
         [ObservableProperty]
         private ObservableCollection<ColumnMappingViewModel> columnMappings = new();
+
+        [ObservableProperty]
+        private ObservableCollection<ColumnOption> columnOptions = new();
+
+        [ObservableProperty]
+        private ObservableCollection<FieldExplanationRowViewModel> fieldExplanationRows = new();
 
         public IReadOnlyList<FieldOption> FieldOptions => fieldOptions;
 
@@ -162,7 +175,40 @@ namespace ElectricCalculation.ViewModels
 
             try
             {
-                LoadPreview(ExcelImportService.BuildPreview(filePath, value));
+                LoadPreview(ExcelImportService.BuildPreview(FilePath, value));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                PreviewWarningMessage = ex.Message;
+            }
+        }
+
+        partial void OnHeaderRowNumberChanged(int value)
+        {
+            if (suppressHeaderReload)
+            {
+                return;
+            }
+
+            if (value < 1)
+            {
+                suppressHeaderReload = true;
+                try
+                {
+                    HeaderRowNumber = 1;
+                }
+                finally
+                {
+                    suppressHeaderReload = false;
+                }
+
+                return;
+            }
+
+            try
+            {
+                LoadPreview(ExcelImportService.BuildPreview(FilePath, SelectedSheetName, value));
             }
             catch (Exception ex)
             {
@@ -278,7 +324,7 @@ namespace ElectricCalculation.ViewModels
                 var result = await Task.Run(() =>
                 {
                     var list = ExcelImportService.ImportFromFile(
-                        filePath,
+                        FilePath,
                         preview.SelectedSheetName,
                         map,
                         preview.DataStartRowIndex,
@@ -339,6 +385,82 @@ namespace ElectricCalculation.ViewModels
             DialogResult = false;
         }
 
+        [RelayCommand]
+        private void BrowseExcelFile()
+        {
+            if (IsImporting)
+            {
+                return;
+            }
+
+            var picked = ui.ShowOpenExcelFileDialog();
+            if (string.IsNullOrWhiteSpace(picked))
+            {
+                return;
+            }
+
+            LoadFromFile(picked);
+        }
+
+        [RelayCommand]
+        private void AcceptDroppedExcelFile(string filePath)
+        {
+            if (IsImporting)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            LoadFromFile(filePath);
+        }
+
+        [RelayCommand]
+        private void DownloadSampleTemplate()
+        {
+            if (IsImporting)
+            {
+                return;
+            }
+
+            try
+            {
+                var templatePath = ui.GetSummaryTemplatePath();
+                var outputPath = ui.ShowSaveExcelFileDialog("Bang_tong_hop_tien_dien_mau.xlsx", title: "Tải tệp mẫu");
+                if (string.IsNullOrWhiteSpace(outputPath))
+                {
+                    return;
+                }
+
+                File.Copy(templatePath, outputPath, overwrite: true);
+                PreviewWarningMessage = $"Đã lưu tệp mẫu: {outputPath}";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                PreviewWarningMessage = ex.Message;
+            }
+        }
+
+        private void LoadFromFile(string path)
+        {
+            try
+            {
+                var next = ExcelImportService.BuildPreview(path);
+                FilePath = path;
+                LoadPreview(next);
+                CurrentStep = 0;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                PreviewWarningMessage = ex.Message;
+            }
+        }
+
         public Dictionary<ExcelImportService.ImportField, string> BuildConfirmedMap()
         {
             var result = new Dictionary<ExcelImportService.ImportField, string>();
@@ -363,18 +485,22 @@ namespace ElectricCalculation.ViewModels
             PreviewWarningMessage = preview.WarningMessage ?? string.Empty;
 
             suppressSheetReload = true;
+            suppressHeaderReload = true;
             try
             {
                 SheetNames = new ObservableCollection<string>(preview.SheetNames);
                 SelectedSheetName = preview.SelectedSheetName ?? string.Empty;
+                HeaderRowNumber = preview.HeaderRowIndex ?? 1;
             }
             finally
             {
                 suppressSheetReload = false;
+                suppressHeaderReload = false;
             }
 
             BuildFieldOptions();
             BuildColumnMappings();
+            BuildFieldExplanationRows();
             LoadPresetOptionsAndApplyDefault();
 
             ErrorMessages = new ObservableCollection<string>();
@@ -387,6 +513,7 @@ namespace ElectricCalculation.ViewModels
             ImportStatusText = "Bấm “Kiểm tra” để xem lỗi trước khi nhập.";
 
             UpdateConflictAndMissingFlags();
+            SyncFieldExplanationSelectionsFromColumns();
             OnPropertyChanged(nameof(CanImport));
             OnPropertyChanged(nameof(CanSavePreset));
         }
@@ -442,6 +569,9 @@ namespace ElectricCalculation.ViewModels
                 .ToList();
 
             ColumnMappings = new ObservableCollection<ColumnMappingViewModel>(columns.Select(CreateColumnMapping));
+            ColumnOptions = new ObservableCollection<ColumnOption>(
+                new[] { new ColumnOption(null, string.Empty, string.Empty) }
+                    .Concat(columns.Select(c => new ColumnOption(c.ColumnLetter, c.HeaderText ?? string.Empty, BuildSamplePreview(c)))));
 
             columnMappingsByLetter = ColumnMappings
                 .Where(c => !string.IsNullOrWhiteSpace(c.ColumnLetter))
@@ -454,8 +584,120 @@ namespace ElectricCalculation.ViewModels
                 column.SelectionChanged += (_, _) =>
                 {
                     UpdateConflictAndMissingFlags();
+                    SyncFieldExplanationSelectionsFromColumns();
                     OnPropertyChanged(nameof(CanImport));
                 };
+            }
+        }
+
+        private static string BuildSamplePreview(ImportColumnPreview column)
+        {
+            if (column.SampleValues == null || column.SampleValues.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return string.Join(" | ", column.SampleValues.Where(v => !string.IsNullOrWhiteSpace(v)).Take(3));
+        }
+
+        private void BuildFieldExplanationRows()
+        {
+            var importantFields = new[]
+            {
+                ExcelImportService.ImportField.Name,
+                ExcelImportService.ImportField.MeterNumber,
+                ExcelImportService.ImportField.PreviousIndex,
+                ExcelImportService.ImportField.CurrentIndex,
+                ExcelImportService.ImportField.Multiplier,
+                ExcelImportService.ImportField.UnitPrice
+            };
+
+            var allFields = Enum.GetValues<ExcelImportService.ImportField>();
+            var ordered = importantFields.Concat(allFields.Where(f => !importantFields.Contains(f))).ToList();
+
+            FieldExplanationRows = new ObservableCollection<FieldExplanationRowViewModel>(ordered.Select(field =>
+                new FieldExplanationRowViewModel(field, GetFieldLabel(field), GetFieldDescription(field))));
+
+            foreach (var row in FieldExplanationRows)
+            {
+                row.SelectionChanged += (_, _) =>
+                {
+                    ApplyFieldSelection(row);
+                    SyncFieldExplanationSelectionsFromColumns();
+                    UpdateConflictAndMissingFlags();
+                    OnPropertyChanged(nameof(CanImport));
+                };
+            }
+
+            SyncFieldExplanationSelectionsFromColumns();
+        }
+
+        private void SyncFieldExplanationSelectionsFromColumns()
+        {
+            if (suppressFieldMappingSync || FieldExplanationRows.Count == 0)
+            {
+                return;
+            }
+
+            suppressFieldMappingSync = true;
+            try
+            {
+                var byField = ColumnMappings
+                    .Where(c => c.SelectedField != null)
+                    .GroupBy(c => c.SelectedField!.Value)
+                    .ToDictionary(g => g.Key, g => g.Select(x => x.ColumnLetter).FirstOrDefault());
+
+                foreach (var row in FieldExplanationRows)
+                {
+                    row.SelectedColumnLetter = byField.TryGetValue(row.Field, out var col) ? col : null;
+                }
+            }
+            finally
+            {
+                suppressFieldMappingSync = false;
+            }
+        }
+
+        private void ApplyFieldSelection(FieldExplanationRowViewModel row)
+        {
+            if (suppressFieldMappingSync)
+            {
+                return;
+            }
+
+            suppressFieldMappingSync = true;
+            try
+            {
+                foreach (var column in ColumnMappings)
+                {
+                    if (column.SelectedField == row.Field &&
+                        !string.Equals(column.ColumnLetter, row.SelectedColumnLetter, StringComparison.OrdinalIgnoreCase))
+                    {
+                        column.IsLocked = false;
+                        column.SelectedField = null;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(row.SelectedColumnLetter))
+                {
+                    return;
+                }
+
+                var selectedColumn = ColumnMappings.FirstOrDefault(c =>
+                    string.Equals(c.ColumnLetter, row.SelectedColumnLetter, StringComparison.OrdinalIgnoreCase));
+
+                if (selectedColumn == null)
+                {
+                    row.SelectedColumnLetter = null;
+                    return;
+                }
+
+                selectedColumn.IsLocked = false;
+                selectedColumn.SelectedField = row.Field;
+            }
+            finally
+            {
+                suppressFieldMappingSync = false;
             }
         }
 
@@ -1016,6 +1258,11 @@ namespace ElectricCalculation.ViewModels
             return FieldLabels.TryGetValue(field, out var label) ? label : field.ToString();
         }
 
+        private static string GetFieldDescription(ExcelImportService.ImportField field)
+        {
+            return FieldDescriptions.TryGetValue(field, out var description) ? description : string.Empty;
+        }
+
         private static string GetColumnDisplay(ColumnMappingViewModel column)
         {
             var header = (column.HeaderText ?? string.Empty).Trim();
@@ -1043,6 +1290,29 @@ namespace ElectricCalculation.ViewModels
             [ExcelImportService.ImportField.PerformedBy] = "Người ghi",
             [ExcelImportService.ImportField.BuildingName] = "Tòa / Mã sổ",
             [ExcelImportService.ImportField.Category] = "Loại"
+        };
+
+        private static readonly Dictionary<ExcelImportService.ImportField, string> FieldDescriptions = new()
+        {
+            [ExcelImportService.ImportField.SequenceNumber] = "Số thứ tự (STT) của khách trong bảng kê.",
+            [ExcelImportService.ImportField.Name] = "Tên hộ tiêu thụ/khách hàng.",
+            [ExcelImportService.ImportField.GroupName] = "Nhóm/tổ/đơn vị quản lý khách.",
+            [ExcelImportService.ImportField.Address] = "Địa chỉ hộ tiêu thụ.",
+            [ExcelImportService.ImportField.MeterNumber] = "Số công tơ điện.",
+            [ExcelImportService.ImportField.CurrentIndex] = "Chỉ số điện mới (kỳ này).",
+            [ExcelImportService.ImportField.PreviousIndex] = "Chỉ số điện cũ (kỳ trước).",
+            [ExcelImportService.ImportField.Multiplier] = "Hệ số nhân công tơ (nếu có).",
+            [ExcelImportService.ImportField.UnitPrice] = "Đơn giá điện (VNĐ/kWh).",
+            [ExcelImportService.ImportField.SubsidizedKwh] = "Sản lượng được trợ giá/bao cấp (kWh) (nếu có).",
+            [ExcelImportService.ImportField.Phone] = "SĐT người đại diện/khách.",
+            [ExcelImportService.ImportField.HouseholdPhone] = "SĐT hộ (nếu tách riêng).",
+            [ExcelImportService.ImportField.RepresentativeName] = "Tên người đại diện hộ/khách.",
+            [ExcelImportService.ImportField.Location] = "Vị trí lắp đặt công tơ.",
+            [ExcelImportService.ImportField.Substation] = "Trạm biến áp (TBA)/nguồn cấp.",
+            [ExcelImportService.ImportField.Page] = "Trang/phiên bản in (nếu có).",
+            [ExcelImportService.ImportField.PerformedBy] = "Người ghi chỉ số/thu.",
+            [ExcelImportService.ImportField.BuildingName] = "Tòa/nhà/mã sổ (nếu dùng).",
+            [ExcelImportService.ImportField.Category] = "Loại/nhóm khách hàng."
         };
     }
 }

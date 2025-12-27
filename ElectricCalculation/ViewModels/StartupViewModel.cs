@@ -101,9 +101,32 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
-        private void NewSession()
+        private void CreateNewDataset()
         {
-            OpenEditorWindow(init: null);
+            try
+            {
+                var option = _ui.ShowNewDatasetOptionsDialog();
+                if (option == null)
+                {
+                    return;
+                }
+
+                switch (option.Value)
+                {
+                    case NewDatasetCreationOption.ManualEntry:
+                        OpenEditorWindow(init: null);
+                        break;
+                    case NewDatasetCreationOption.ImportFromExcel:
+                        StartExcelImport();
+                        break;
+                    default:
+                        return;
+                }
+            }
+            catch (Exception ex)
+            {
+                HandleRequestError(ex);
+            }
         }
 
         private bool CanCreateNewPeriodFromDataset() => RecentSnapshots.Count > 0;
@@ -282,8 +305,7 @@ namespace ElectricCalculation.ViewModels
             return true;
         }
 
-        [RelayCommand]
-        private void ImportExcel()
+        private void StartExcelImport()
         {
             var filePath = _ui.ShowOpenExcelFileDialog();
             if (string.IsNullOrWhiteSpace(filePath))

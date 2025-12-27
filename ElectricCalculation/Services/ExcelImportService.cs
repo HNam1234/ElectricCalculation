@@ -52,7 +52,7 @@ namespace ElectricCalculation.Services
         private static readonly IReadOnlyList<FieldRule> FieldRules = new[]
         {
             new FieldRule(ImportField.SequenceNumber, new[] { "stt", "so thu tu", "so tt", "no", "no." }, Priority: 10, Required: false),
-            new FieldRule(ImportField.Name, new[] { "ten khach", "khach hang", "ho ten", "ten", "name" }, Priority: 10, Required: true),
+            new FieldRule(ImportField.Name, new[] { "ten khach", "khach hang", "ho ten", "ho tieu thu", "ho tieu thu dien", "ten", "name" }, Priority: 10, Required: true),
             new FieldRule(ImportField.MeterNumber, new[] { "so cong to", "cong to", "meter", "meter number" }, Priority: 10, Required: false),
             new FieldRule(ImportField.CurrentIndex, new[] { "chi so moi", "cs moi", "current", "end" }, Priority: 10, Required: false),
             new FieldRule(ImportField.PreviousIndex, new[] { "chi so cu", "cs cu", "previous", "start" }, Priority: 10, Required: false),
@@ -60,15 +60,15 @@ namespace ElectricCalculation.Services
             new FieldRule(ImportField.Multiplier, new[] { "he so", "hs", "multiplier" }, Priority: 10, Required: false),
 
             new FieldRule(ImportField.GroupName, new[] { "nhom", "don vi", "group", "unit" }, Priority: 0, Required: false),
-            new FieldRule(ImportField.Address, new[] { "dia chi", "dc", "address" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Address, new[] { "dia chi ho tieu thu dien", "dia chi ho tieu thu", "dia chi", "dc", "address" }, Priority: 0, Required: false),
             new FieldRule(ImportField.Phone, new[] { "dien thoai", "so dt", "sdt", "dt", "phone" }, Priority: 0, Required: false),
             new FieldRule(ImportField.HouseholdPhone, new[] { "dt ho", "dien thoai ho", "so dt ho" }, Priority: 0, Required: false),
             new FieldRule(ImportField.RepresentativeName, new[] { "dai dien", "nguoi dai dien", "representative" }, Priority: 0, Required: false),
-            new FieldRule(ImportField.Location, new[] { "vi tri", "location" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.Location, new[] { "vi tri lap dat cong to", "vi tri dat cong to", "vi tri lap dat", "vi tri", "location" }, Priority: 0, Required: false),
             new FieldRule(ImportField.Substation, new[] { "tram", "tba", "substation" }, Priority: 0, Required: false),
             new FieldRule(ImportField.Page, new[] { "trang", "page" }, Priority: 0, Required: false),
             new FieldRule(ImportField.SubsidizedKwh, new[] { "bao cap", "tro cap", "mien giam", "subsidy" }, Priority: 0, Required: false),
-            new FieldRule(ImportField.PerformedBy, new[] { "nguoi thu", "nguoi ghi", "performed" }, Priority: 0, Required: false),
+            new FieldRule(ImportField.PerformedBy, new[] { "nguoi thuc hien", "nguoi ghi chi so", "nguoi ghi", "nguoi thu", "performed" }, Priority: 0, Required: false),
             new FieldRule(ImportField.BuildingName, new[] { "toa", "nha", "ma so", "building", "book" }, Priority: 0, Required: false),
             new FieldRule(ImportField.Category, new[] { "loai", "category" }, Priority: 0, Required: false)
         };
@@ -94,15 +94,24 @@ namespace ElectricCalculation.Services
 
         public static ImportPreviewResult BuildPreview(string filePath)
         {
-            return BuildPreview(filePath, sheetName: null);
+            return BuildPreview(filePath, sheetName: null, headerRowIndexOverride: null);
         }
 
         public static ImportPreviewResult BuildPreview(string filePath, string? sheetName)
+        {
+            return BuildPreview(filePath, sheetName, headerRowIndexOverride: null);
+        }
+
+        public static ImportPreviewResult BuildPreview(string filePath, string? sheetName, int? headerRowIndexOverride)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
                 throw new InvalidOperationException("Duong dan file Excel dang trong.");
             }
+
+            var forcedHeaderRowIndex = headerRowIndexOverride.HasValue && headerRowIndexOverride.Value > 0
+                ? headerRowIndexOverride.Value
+                : (int?)null;
 
             using var archive = ZipFile.OpenRead(filePath);
 
@@ -118,7 +127,8 @@ namespace ElectricCalculation.Services
             var sharedStrings = LoadSharedStrings(archive, mainNs);
             var sheetDataElement = LoadSheetDataElement(archive, mainNs, selectedSheet.Path);
 
-            var previewRows = new List<ImportSampleRow>(capacity: 10);
+            var firstPreviewRows = new List<ImportSampleRow>(capacity: 10);
+            var headerPreviewRows = new List<ImportSampleRow>(capacity: 10);
             var sampleRows = new List<ImportSampleRow>(capacity: 5);
             var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -140,18 +150,39 @@ namespace ElectricCalculation.Services
                     columns.Add(key);
                 }
 
-                if (previewRows.Count < 10)
+                if (firstPreviewRows.Count < 10)
                 {
-                    previewRows.Add(new ImportSampleRow(rowIndex, cells));
+                    firstPreviewRows.Add(new ImportSampleRow(rowIndex, cells));
                 }
 
-                if (headerRowIndex == null && rowIndex <= 200 && TryDetectHeaderMap(cells, out var detectedMap))
+                if (forcedHeaderRowIndex.HasValue && rowIndex == forcedHeaderRowIndex.Value)
+                {
+                    headerRowIndex = rowIndex;
+                    dataStartRowIndex = rowIndex + 1;
+                    headerCells = new Dictionary<string, string?>(cells, StringComparer.OrdinalIgnoreCase);
+
+                    if (TryDetectHeaderMap(cells, out var forcedMap))
+                    {
+                        detectedHeaderMap = forcedMap;
+                    }
+                }
+
+                if (forcedHeaderRowIndex == null &&
+                    headerRowIndex == null &&
+                    rowIndex <= 200 &&
+                    TryDetectHeaderMap(cells, out var detectedMap))
                 {
                     headerRowIndex = rowIndex;
                     dataStartRowIndex = rowIndex + 1;
                     detectedHeaderMap = detectedMap;
                     headerCells = new Dictionary<string, string?>(cells, StringComparer.OrdinalIgnoreCase);
-                    continue;
+                }
+
+                if (headerRowIndex != null &&
+                    rowIndex >= headerRowIndex.Value &&
+                    headerPreviewRows.Count < 10)
+                {
+                    headerPreviewRows.Add(new ImportSampleRow(rowIndex, cells));
                 }
 
                 if (dataStartRowIndex != null &&
@@ -161,13 +192,36 @@ namespace ElectricCalculation.Services
                     sampleRows.Add(new ImportSampleRow(rowIndex, cells));
                 }
 
-                var reachedPreview = previewRows.Count >= 10;
+                if (forcedHeaderRowIndex != null)
+                {
+                    var reachedPreview = firstPreviewRows.Count >= 10;
+                    var reachedHeader = headerRowIndex != null;
+                    var reachedForcedHeaderPreview = headerPreviewRows.Count >= 10;
+                    var reachedSamples = sampleRows.Count >= 5;
+
+                    if (reachedPreview && reachedHeader && reachedForcedHeaderPreview && reachedSamples)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
+                var reachedTopPreview = firstPreviewRows.Count >= 10;
                 var reachedScan = rowIndex > 200 || headerRowIndex != null;
-                var reachedSamples = headerRowIndex == null || sampleRows.Count >= 5;
-                if (reachedPreview && reachedScan && reachedSamples)
+                var reachedHeaderPreview = headerRowIndex == null || headerPreviewRows.Count >= 10;
+                var reachedSamplesAuto = headerRowIndex == null || sampleRows.Count >= 5;
+                if (reachedTopPreview && reachedScan && reachedHeaderPreview && reachedSamplesAuto)
                 {
                     break;
                 }
+            }
+
+            var previewRows = headerPreviewRows.Count > 0 ? headerPreviewRows : firstPreviewRows;
+
+            if (forcedHeaderRowIndex != null && headerRowIndex == null)
+            {
+                throw new InvalidOperationException($"Khong tim thay dong tieu de so {forcedHeaderRowIndex.Value} trong sheet.");
             }
 
             if (headerCells == null && previewRows.Count > 0)
@@ -213,6 +267,7 @@ namespace ElectricCalculation.Services
             }
 
             ApplyAmbiguousIndexHeuristics(columnPreviews);
+            ApplyRepresentativePhoneHeuristics(columnPreviews);
 
             var headerSignature = headerRowIndex == null
                 ? null
@@ -750,6 +805,113 @@ namespace ElectricCalculation.Services
                     };
                 }
             }
+        }
+
+        private static void ApplyRepresentativePhoneHeuristics(List<ImportColumnPreview> columnPreviews)
+        {
+            if (columnPreviews == null || columnPreviews.Count == 0)
+            {
+                return;
+            }
+
+            for (var i = 0; i < columnPreviews.Count; i++)
+            {
+                var header = NormalizeHeader(columnPreviews[i].HeaderText);
+                if (string.IsNullOrWhiteSpace(header))
+                {
+                    continue;
+                }
+
+                if (IsRepresentativePhoneHeader(header))
+                {
+                    columnPreviews[i] = columnPreviews[i] with
+                    {
+                        SuggestedField = ImportField.Phone,
+                        SuggestedScore = Math.Max(columnPreviews[i].SuggestedScore, HeaderFieldScoreThreshold)
+                    };
+                    continue;
+                }
+
+                if (IsHouseholdPhoneHeader(header))
+                {
+                    columnPreviews[i] = columnPreviews[i] with
+                    {
+                        SuggestedField = ImportField.HouseholdPhone,
+                        SuggestedScore = Math.Max(columnPreviews[i].SuggestedScore, HeaderFieldScoreThreshold)
+                    };
+                    continue;
+                }
+
+                if (IsRepresentativeNameHeader(header))
+                {
+                    columnPreviews[i] = columnPreviews[i] with
+                    {
+                        SuggestedField = ImportField.RepresentativeName,
+                        SuggestedScore = Math.Max(columnPreviews[i].SuggestedScore, HeaderFieldScoreThreshold)
+                    };
+                }
+            }
+        }
+
+        private static bool IsRepresentativePhoneHeader(string normalizedHeader)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedHeader))
+            {
+                return false;
+            }
+
+            var hasPhone = normalizedHeader.Contains("dien thoai", StringComparison.OrdinalIgnoreCase) ||
+                           normalizedHeader.Contains("sdt", StringComparison.OrdinalIgnoreCase);
+
+            if (!hasPhone)
+            {
+                return false;
+            }
+
+            return normalizedHeader.Contains("nguoi dai dien", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedHeader.Contains("dai dien", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsHouseholdPhoneHeader(string normalizedHeader)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedHeader))
+            {
+                return false;
+            }
+
+            var hasPhone = normalizedHeader.Contains("dien thoai", StringComparison.OrdinalIgnoreCase) ||
+                           normalizedHeader.Contains("sdt", StringComparison.OrdinalIgnoreCase);
+
+            if (!hasPhone)
+            {
+                return false;
+            }
+
+            return normalizedHeader.Contains("ho tieu thu", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedHeader.Contains("ho gia dinh", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedHeader.Contains("dien thoai ho", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedHeader.Contains("dt ho", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsRepresentativeNameHeader(string normalizedHeader)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedHeader))
+            {
+                return false;
+            }
+
+            var hasName = normalizedHeader.Contains("dai dien", StringComparison.OrdinalIgnoreCase) ||
+                          normalizedHeader.Contains("nguoi dai dien", StringComparison.OrdinalIgnoreCase);
+
+            if (!hasName)
+            {
+                return false;
+            }
+
+            var hasPhone = normalizedHeader.Contains("dien thoai", StringComparison.OrdinalIgnoreCase) ||
+                           normalizedHeader.Contains("sdt", StringComparison.OrdinalIgnoreCase);
+
+            return !hasPhone;
         }
 
         private static bool IsAmbiguousIndexHeader(string headerText)
