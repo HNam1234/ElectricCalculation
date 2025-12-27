@@ -4,6 +4,8 @@
              xmlns:local="clr-namespace:ElectricCalculation"
              StartupUri="Views/StartupWindow.xaml">
     <Application.Resources>
-         
+        <Style TargetType="{x:Type Window}">
+            <Setter Property="Icon" Value="pack://application:,,,/Assets/AppIcon.png" />
+        </Style>
     </Application.Resources>
 </Application>
