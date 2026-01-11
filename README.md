@@ -132,11 +132,3 @@ Template trong repo (source):
 - Model: `ElectricCalculation/ElectricCalculation/Models/`
 - Service: `ElectricCalculation/ElectricCalculation/Services/`
 
-```mermaid
-flowchart LR
-  V[Views (XAML)] --> VM[ViewModels (Commands/State)]
-  V --> Glue[Behaviors/Converters]
-  VM --> M[Models]
-  VM --> S[Services]
-  S --> Files[(.xlsx / .json / .pdf)]
-```
