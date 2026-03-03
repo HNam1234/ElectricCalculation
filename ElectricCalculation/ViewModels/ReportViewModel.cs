@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ElectricCalculation.Models;
@@ -42,6 +43,8 @@ namespace ElectricCalculation.ViewModels
     public partial class ReportViewModel : ObservableObject
     {
         private readonly UiService _ui;
+
+        private const string NoGroupLabel = "(Không có nhóm)";
 
         private readonly decimal _maxKwh;
         private readonly decimal _maxAmount;
@@ -142,7 +145,7 @@ namespace ElectricCalculation.ViewModels
             _sourceCustomers = customers?.ToList() ?? new List<Customer>();
 
             var groups = _sourceCustomers
-                .GroupBy(c => string.IsNullOrWhiteSpace(c.GroupName) ? "(Không có nhóm)" : c.GroupName)
+                .GroupBy(c => NormalizeGroupKey(c.GroupName), StringComparer.CurrentCultureIgnoreCase)
                 .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase);
 
             foreach (var g in groups)
@@ -204,7 +207,7 @@ namespace ElectricCalculation.ViewModels
 
             try
             {
-                var groupName = string.IsNullOrWhiteSpace(item.GroupName) ? "(Không có nhóm)" : item.GroupName.Trim();
+                var groupName = NormalizeGroupKey(item.GroupName);
                 var confirm = _ui.Confirm(
                     "In hóa đơn nhóm",
                     $"Nhóm: {groupName}\nSố khách: {customers.Count}\n\nXuất 1 hóa đơn gộp cho nhóm này?");
@@ -284,7 +287,7 @@ namespace ElectricCalculation.ViewModels
 
                 foreach (var group in groupedItems)
                 {
-                    var groupName = string.IsNullOrWhiteSpace(group.GroupName) ? "(Không có nhóm)" : group.GroupName.Trim();
+                    var groupName = NormalizeGroupKey(group.GroupName);
                     var customers = GetCustomersForGroup(group)
                         .OrderBy(c => c.SequenceNumber)
                         .ToList();
@@ -395,13 +398,63 @@ namespace ElectricCalculation.ViewModels
                 return Enumerable.Empty<Customer>();
             }
 
-            var target = item.GroupName ?? string.Empty;
+            var target = NormalizeGroupKey(item.GroupName);
 
             return _sourceCustomers.Where(c =>
             {
-                var key = string.IsNullOrWhiteSpace(c.GroupName) ? "(Không có nhóm)" : c.GroupName;
+                var key = NormalizeGroupKey(c.GroupName);
                 return string.Equals(key, target, StringComparison.CurrentCultureIgnoreCase);
             });
+        }
+
+        private static string NormalizeGroupKey(string? groupName)
+        {
+            if (string.IsNullOrWhiteSpace(groupName))
+            {
+                return NoGroupLabel;
+            }
+
+            // Normalize for grouping: trim, collapse whitespace, and normalize unicode composition.
+            // This prevents duplicates such as "Trường Cơ khí" vs "Trường Cơ khí ".
+            var value = groupName
+                .Replace('\u00A0', ' ') // NBSP
+                .Replace('\u200B', ' ') // Zero-width space
+                .Replace('\uFEFF', ' '); // BOM
+
+            value = value.Normalize(NormalizationForm.FormC).Trim();
+            value = CollapseWhitespace(value);
+
+            return string.IsNullOrWhiteSpace(value) ? NoGroupLabel : value;
+        }
+
+        private static string CollapseWhitespace(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var sb = new StringBuilder(value.Length);
+            var inWhitespace = false;
+
+            foreach (var ch in value)
+            {
+                if (char.IsWhiteSpace(ch))
+                {
+                    if (!inWhitespace)
+                    {
+                        sb.Append(' ');
+                        inWhitespace = true;
+                    }
+
+                    continue;
+                }
+
+                sb.Append(ch);
+                inWhitespace = false;
+            }
+
+            return sb.ToString().Trim();
         }
 
         private static string FormatTick(decimal value)
