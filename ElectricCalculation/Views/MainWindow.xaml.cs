@@ -77,6 +77,7 @@ namespace ElectricCalculation.Views
                 if (action == SaveSnapshotPromptAction.Overwrite && !string.IsNullOrWhiteSpace(vm.LoadedSnapshotPath))
                 {
                     ProjectFileService.Save(vm.LoadedSnapshotPath, vm.PeriodLabel, vm.Customers);
+                    SaveGameService.SyncSnapshotFileToSharedStore(vm.LoadedSnapshotPath, vm.PeriodLabel);
                     vm.IsDirty = false;
                     return true;
                 }

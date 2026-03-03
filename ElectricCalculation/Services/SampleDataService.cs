@@ -20,6 +20,11 @@ namespace ElectricCalculation.Services
         {
             try
             {
+                if (SaveGameService.IsSharedSyncEnabled())
+                {
+                    return false;
+                }
+
                 var markerPath = GetSeedMarkerPath();
                 if (File.Exists(markerPath))
                 {

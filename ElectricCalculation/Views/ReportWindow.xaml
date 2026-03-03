@@ -349,6 +349,11 @@
                     Margin="0,0,8,0"
                     Command="{Binding PrintGroupCommand}" />
 
+            <Button Content="In tất cả nhóm"
+                    Width="120"
+                    Margin="0,0,8,0"
+                    Command="{Binding PrintAllGroupsCommand}" />
+
             <Button Content="Đóng"
                     Width="90"
                     Command="{Binding CloseCommand}" />

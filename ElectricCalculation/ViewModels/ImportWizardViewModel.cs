@@ -18,7 +18,14 @@ namespace ElectricCalculation.ViewModels
 {
     public sealed partial class ImportWizardViewModel : ObservableObject
     {
+        public enum ImportWizardMode
+        {
+            FullDataset,
+            CurrentIndexOnly
+        }
+
         private readonly UiService ui;
+        private readonly ImportWizardMode mode;
         private ImportPreviewResult preview;
         private bool suppressSheetReload;
         private bool suppressHeaderReload;
@@ -37,9 +44,10 @@ namespace ElectricCalculation.ViewModels
         [ObservableProperty]
         private int headerRowNumber = 1;
 
-        public ImportWizardViewModel(UiService ui, string filePath)
+        public ImportWizardViewModel(UiService ui, string filePath, ImportWizardMode mode = ImportWizardMode.FullDataset)
         {
             this.ui = ui ?? throw new ArgumentNullException(nameof(ui));
+            this.mode = mode;
             FilePath = filePath ?? string.Empty;
             preview = ExcelImportService.BuildPreview(FilePath);
             LoadPreview(preview);
@@ -107,6 +115,16 @@ namespace ElectricCalculation.ViewModels
 
         public IReadOnlyList<FieldOption> FieldOptions => fieldOptions;
 
+        public bool IsCurrentIndexOnlyMode => mode == ImportWizardMode.CurrentIndexOnly;
+
+        public string RequiredPrimaryText => IsCurrentIndexOnlyMode
+            ? "* Bat buoc: Chi so moi"
+            : "* Bat buoc: Ten khach";
+
+        public string RequiredSecondaryText => IsCurrentIndexOnlyMode
+            ? "* Bat buoc: Chon it nhat 1 khoa ghep: So cong to / So thu tu / Ten khach"
+            : "* Bat buoc: Chon it nhat 1 trong: So cong to / Chi so cu / Chi so moi / Don gia";
+
         [ObservableProperty]
         private bool isNameMapped;
 
@@ -159,6 +177,35 @@ namespace ElectricCalculation.ViewModels
         public bool CanImport => !IsImporting && !HasBlockingErrors();
 
         public bool CanFinish => HasImportResult && !IsImporting;
+
+        private static readonly ExcelImportService.ImportField[] FullDatasetSecondaryRequiredFields =
+        {
+            ExcelImportService.ImportField.MeterNumber,
+            ExcelImportService.ImportField.CurrentIndex,
+            ExcelImportService.ImportField.PreviousIndex,
+            ExcelImportService.ImportField.UnitPrice
+        };
+
+        private static readonly ExcelImportService.ImportField[] CurrentIndexOnlySecondaryRequiredFields =
+        {
+            ExcelImportService.ImportField.MeterNumber,
+            ExcelImportService.ImportField.SequenceNumber,
+            ExcelImportService.ImportField.Name
+        };
+
+        private ExcelImportService.ImportField GetPrimaryRequiredField()
+        {
+            return IsCurrentIndexOnlyMode
+                ? ExcelImportService.ImportField.CurrentIndex
+                : ExcelImportService.ImportField.Name;
+        }
+
+        private IReadOnlyList<ExcelImportService.ImportField> GetSecondaryRequiredFields()
+        {
+            return IsCurrentIndexOnlyMode
+                ? CurrentIndexOnlySecondaryRequiredFields
+                : FullDatasetSecondaryRequiredFields;
+        }
 
         partial void OnSelectedSheetNameChanged(string value)
         {
@@ -543,12 +590,13 @@ namespace ElectricCalculation.ViewModels
 
             var allFields = Enum.GetValues<ExcelImportService.ImportField>();
             var ordered = importantFields.Concat(allFields.Where(f => !importantFields.Contains(f))).ToList();
-
             var options = new List<FieldOption> { new(null, "(Không dùng)") };
+            var primaryRequiredField = GetPrimaryRequiredField();
+
             foreach (var field in ordered)
             {
                 var label = GetFieldLabel(field);
-                if (field == ExcelImportService.ImportField.Name)
+                if (field == primaryRequiredField)
                 {
                     label = $"{label} (bắt buộc)";
                 }
@@ -940,27 +988,21 @@ namespace ElectricCalculation.ViewModels
                 .Select(c => c.SelectedField!.Value)
                 .ToList();
 
-            IsNameMapped = selectedFields.Contains(ExcelImportService.ImportField.Name);
+            var primaryRequiredField = GetPrimaryRequiredField();
+            var secondaryRequiredFields = GetSecondaryRequiredFields();
 
-            var keyFields = new[]
-            {
-                ExcelImportService.ImportField.MeterNumber,
-                ExcelImportService.ImportField.PreviousIndex,
-                ExcelImportService.ImportField.CurrentIndex,
-                ExcelImportService.ImportField.UnitPrice
-            };
-
-            IsAnyKeyFieldMapped = selectedFields.Any(f => keyFields.Contains(f));
+            IsNameMapped = selectedFields.Contains(primaryRequiredField);
+            IsAnyKeyFieldMapped = selectedFields.Any(f => secondaryRequiredFields.Contains(f));
 
             if (!IsNameMapped)
             {
                 var candidate = ColumnMappings
-                    .Where(c => c.SuggestedField == ExcelImportService.ImportField.Name && c.SuggestedScore > 0)
+                    .Where(c => c.SuggestedField == primaryRequiredField && c.SuggestedScore > 0)
                     .OrderByDescending(c => c.SuggestedScore)
                     .ThenBy(c => GetColumnIndex(c.ColumnLetter))
                     .FirstOrDefault();
 
-                if (candidate != null && candidate.SelectedField != ExcelImportService.ImportField.Name)
+                if (candidate != null && candidate.SelectedField != primaryRequiredField)
                 {
                     candidate.IsRequiredMissing = true;
                 }
@@ -968,7 +1010,7 @@ namespace ElectricCalculation.ViewModels
 
             if (!IsAnyKeyFieldMapped)
             {
-                foreach (var field in keyFields)
+                foreach (var field in secondaryRequiredFields)
                 {
                     var candidate = ColumnMappings
                         .Where(c => c.SuggestedField == field && c.SuggestedScore > 0)
@@ -994,16 +1036,14 @@ namespace ElectricCalculation.ViewModels
             }
 
             var map = BuildConfirmedMap();
-            if (!map.ContainsKey(ExcelImportService.ImportField.Name))
+            var primaryRequiredField = GetPrimaryRequiredField();
+            if (!map.ContainsKey(primaryRequiredField))
             {
                 return true;
             }
 
-            var hasAnyKeyField =
-                map.ContainsKey(ExcelImportService.ImportField.MeterNumber) ||
-                map.ContainsKey(ExcelImportService.ImportField.CurrentIndex) ||
-                map.ContainsKey(ExcelImportService.ImportField.PreviousIndex) ||
-                map.ContainsKey(ExcelImportService.ImportField.UnitPrice);
+            var secondaryRequiredFields = GetSecondaryRequiredFields();
+            var hasAnyKeyField = secondaryRequiredFields.Any(map.ContainsKey);
 
             return !hasAnyKeyField;
         }
@@ -1011,21 +1051,21 @@ namespace ElectricCalculation.ViewModels
         private List<string> BuildValidationErrors(Dictionary<ExcelImportService.ImportField, string> map)
         {
             var errors = new List<string>();
+            var primaryRequiredField = GetPrimaryRequiredField();
+            var secondaryRequiredFields = GetSecondaryRequiredFields();
 
-            if (!map.ContainsKey(ExcelImportService.ImportField.Name))
+            if (!map.ContainsKey(primaryRequiredField))
             {
-                errors.Add("❌ Thiếu cột bắt buộc: Tên khách");
+                errors.Add($"❌ Thieu cot bat buoc: {GetFieldLabel(primaryRequiredField)}");
             }
 
-            var hasAnyKeyField =
-                map.ContainsKey(ExcelImportService.ImportField.MeterNumber) ||
-                map.ContainsKey(ExcelImportService.ImportField.CurrentIndex) ||
-                map.ContainsKey(ExcelImportService.ImportField.PreviousIndex) ||
-                map.ContainsKey(ExcelImportService.ImportField.UnitPrice);
+            var hasAnyKeyField = secondaryRequiredFields.Any(map.ContainsKey);
 
             if (!hasAnyKeyField)
             {
-                errors.Add("❌ Cần chọn ít nhất 1 trong: Số công tơ / Chỉ số cũ / Chỉ số mới / Đơn giá");
+                errors.Add(IsCurrentIndexOnlyMode
+                    ? "❌ Can chon it nhat 1 khoa ghep: So cong to / So thu tu / Ten khach"
+                    : "❌ Can chon it nhat 1 trong: So cong to / Chi so cu / Chi so moi / Don gia");
             }
 
             var conflictGroups = ColumnMappings
@@ -1048,12 +1088,12 @@ namespace ElectricCalculation.ViewModels
         {
             var warnings = new List<string>();
 
-            if (!map.ContainsKey(ExcelImportService.ImportField.UnitPrice))
+            if (!IsCurrentIndexOnlyMode && !map.ContainsKey(ExcelImportService.ImportField.UnitPrice))
             {
                 warnings.Add("⚠️ Thiếu cột: Đơn giá (nếu Excel có)");
             }
 
-            if (!map.ContainsKey(ExcelImportService.ImportField.Multiplier))
+            if (!IsCurrentIndexOnlyMode && !map.ContainsKey(ExcelImportService.ImportField.Multiplier))
             {
                 warnings.Add("⚠️ Thiếu cột: Hệ số (nếu Excel có)");
             }

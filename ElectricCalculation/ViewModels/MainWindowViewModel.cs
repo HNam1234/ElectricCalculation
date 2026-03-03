@@ -24,7 +24,15 @@ namespace ElectricCalculation.ViewModels
         private readonly UndoRedoManager _undoRedo = new();
         private readonly List<string> _editHistory = new();
         private bool _suppressDirty;
-        private bool _lastImportExcelSucceeded;
+        private string _normalizedSearchKeyword = string.Empty;
+        private int _selectedSearchFieldIndex;
+
+        private const int SearchFieldNameIndex = 0;
+        private const int SearchFieldGroupIndex = 1;
+        private const int SearchFieldCategoryIndex = 2;
+        private const int SearchFieldAddressIndex = 3;
+        private const int SearchFieldPhoneIndex = 4;
+        private const int SearchFieldMeterIndex = 5;
 
         [ObservableProperty]
         private string? currentDataFilePath;
@@ -123,6 +131,8 @@ namespace ElectricCalculation.ViewModels
             _suppressDirty = true;
             _ui = new UiService();
             _settings = AppSettingsService.Load();
+            _normalizedSearchKeyword = string.Empty;
+            _selectedSearchFieldIndex = SearchFieldNameIndex;
 
             _undoRedo.StateChanged += (_, _) =>
             {
@@ -140,9 +150,49 @@ namespace ElectricCalculation.ViewModels
                 SelectedSearchField = SearchFields[0];
             }
 
+            ApplySearchCache(SearchText, SelectedSearchField);
+
             PeriodLabel = $"Tháng {DateTime.Now.Month:00}/{DateTime.Now.Year}";
             IsDirty = false;
             _suppressDirty = false;
+        }
+
+        private void RefreshCustomersViewAfterFilterChanged()
+        {
+            CustomersView.Refresh();
+            NotifySummaryChanged();
+            NotifyRouteEntryProgressChanged();
+        }
+
+        private void ApplySearchCache(string? keyword, string? searchField)
+        {
+            _normalizedSearchKeyword = NormalizeSearchKeyword(keyword);
+            _selectedSearchFieldIndex = ResolveSearchFieldIndex(searchField);
+        }
+
+        private int ResolveSearchFieldIndex(string? searchField)
+        {
+            if (string.IsNullOrWhiteSpace(searchField))
+            {
+                return SearchFieldNameIndex;
+            }
+
+            for (var i = 0; i < SearchFields.Count; i++)
+            {
+                if (string.Equals(SearchFields[i], searchField, StringComparison.Ordinal))
+                {
+                    return i;
+                }
+            }
+
+            return SearchFieldNameIndex;
+        }
+
+        private static string NormalizeSearchKeyword(string? keyword)
+        {
+            return string.IsNullOrWhiteSpace(keyword)
+                ? string.Empty
+                : keyword.Trim();
         }
 
         public void ImportFromExcelFile(string filePath)
@@ -154,13 +204,6 @@ namespace ElectricCalculation.ViewModels
                 try
                 {
                     ImportFromExcel(filePath);
-
-                    if (_lastImportExcelSucceeded)
-                    {
-                        _undoRedo.Clear();
-                        IsDirty = true;
-                        LoadedSnapshotPath = null;
-                    }
                 }
                 catch (WarningException warning)
                 {
@@ -325,6 +368,11 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
+        private List<Customer> GetCurrentViewCustomers()
+        {
+            return CustomersView.Cast<Customer>().ToList();
+        }
+
         public int CustomerCount => TryGetViewCustomersSnapshot().Count;
 
         public decimal TotalConsumption => TryGetViewCustomersSnapshot().Sum(c => c.Consumption);
@@ -446,8 +494,6 @@ namespace ElectricCalculation.ViewModels
                 throw new WarningException("Không tìm thấy file Excel để import.");
             }
 
-            _lastImportExcelSucceeded = false;
-
             var wizard = _ui.ShowImportWizardDialog(filePath);
             if (wizard == null)
             {
@@ -476,14 +522,248 @@ namespace ElectricCalculation.ViewModels
 
             _undoRedo.Clear();
             LoadedSnapshotPath = null;
-            _lastImportExcelSucceeded = true;
-
-            if (!_suppressDirty)
-            {
-                IsDirty = true;
-            }
 
             RefreshUsageAverages();
+            AutoSaveImportedSnapshot();
+        }
+
+        private void AutoSaveImportedSnapshot()
+        {
+            try
+            {
+                var snapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers, snapshotName: "Thang moi");
+                LoadedSnapshotPath = snapshotPath;
+                IsDirty = false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                LoadedSnapshotPath = null;
+                IsDirty = true;
+                _ui.ShowMessage("Canh bao import Excel", $"Da import nhung tu dong luu that bai:\n{ex.Message}");
+            }
+        }
+
+        private sealed record CurrentIndexImportResult(
+            int SourceRows,
+            int UpdatedRows,
+            int MissingCurrentIndexRows,
+            int UnmatchedRows,
+            int AmbiguousRows,
+            int MissingKeyRows);
+
+        private CurrentIndexImportResult ApplyCurrentIndexImport(
+            IReadOnlyList<Customer> importedRows,
+            IReadOnlyDictionary<ExcelImportService.ImportField, string> map)
+        {
+            var matchByMeter = map.ContainsKey(ExcelImportService.ImportField.MeterNumber);
+            var matchBySequence = map.ContainsKey(ExcelImportService.ImportField.SequenceNumber);
+            var matchByName = map.ContainsKey(ExcelImportService.ImportField.Name);
+
+            if (!matchByMeter && !matchBySequence && !matchByName)
+            {
+                throw new WarningException("Can chon it nhat 1 khoa ghep: So cong to / So thu tu / Ten khach.");
+            }
+
+            var byMeter = new Dictionary<string, Customer>(StringComparer.OrdinalIgnoreCase);
+            var bySequence = new Dictionary<int, Customer>();
+            var byName = new Dictionary<string, Customer>(StringComparer.OrdinalIgnoreCase);
+
+            var ambiguousMeters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ambiguousSequences = new HashSet<int>();
+            var ambiguousNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var customer in Customers)
+            {
+                if (matchByMeter)
+                {
+                    RegisterUniqueLookup(byMeter, ambiguousMeters, NormalizeLookupKey(customer.MeterNumber), customer);
+                }
+
+                if (matchBySequence && customer.SequenceNumber > 0)
+                {
+                    RegisterUniqueLookup(bySequence, ambiguousSequences, customer.SequenceNumber, customer);
+                }
+
+                if (matchByName)
+                {
+                    RegisterUniqueLookup(byName, ambiguousNames, NormalizeLookupKey(customer.Name), customer);
+                }
+            }
+
+            var updatedTargets = new HashSet<Customer>();
+            var updatedRows = 0;
+            var missingCurrentIndexRows = 0;
+            var unmatchedRows = 0;
+            var ambiguousRows = 0;
+            var missingKeyRows = 0;
+
+            var wasSuppressDirty = _suppressDirty;
+            _suppressDirty = true;
+            try
+            {
+                foreach (var imported in importedRows)
+                {
+                    if (!imported.CurrentIndex.HasValue)
+                    {
+                        missingCurrentIndexRows++;
+                        continue;
+                    }
+
+                    var matches = new List<Customer>(3);
+                    var hadAnyProvidedKey = false;
+                    var hasAmbiguousProvidedKey = false;
+
+                    if (matchByMeter)
+                    {
+                        var meterKey = NormalizeLookupKey(imported.MeterNumber);
+                        if (!string.IsNullOrWhiteSpace(meterKey))
+                        {
+                            hadAnyProvidedKey = true;
+                            if (ambiguousMeters.Contains(meterKey))
+                            {
+                                hasAmbiguousProvidedKey = true;
+                            }
+                            else if (byMeter.TryGetValue(meterKey, out var meterCustomer))
+                            {
+                                matches.Add(meterCustomer);
+                            }
+                        }
+                    }
+
+                    if (matchBySequence && imported.SequenceNumber > 0)
+                    {
+                        hadAnyProvidedKey = true;
+                        if (ambiguousSequences.Contains(imported.SequenceNumber))
+                        {
+                            hasAmbiguousProvidedKey = true;
+                        }
+                        else if (bySequence.TryGetValue(imported.SequenceNumber, out var sequenceCustomer))
+                        {
+                            matches.Add(sequenceCustomer);
+                        }
+                    }
+
+                    if (matchByName)
+                    {
+                        var nameKey = NormalizeLookupKey(imported.Name);
+                        if (!string.IsNullOrWhiteSpace(nameKey))
+                        {
+                            hadAnyProvidedKey = true;
+                            if (ambiguousNames.Contains(nameKey))
+                            {
+                                hasAmbiguousProvidedKey = true;
+                            }
+                            else if (byName.TryGetValue(nameKey, out var nameCustomer))
+                            {
+                                matches.Add(nameCustomer);
+                            }
+                        }
+                    }
+
+                    if (!hadAnyProvidedKey)
+                    {
+                        missingKeyRows++;
+                        continue;
+                    }
+
+                    if (matches.Count == 0)
+                    {
+                        if (hasAmbiguousProvidedKey)
+                        {
+                            ambiguousRows++;
+                        }
+                        else
+                        {
+                            unmatchedRows++;
+                        }
+
+                        continue;
+                    }
+
+                    var target = matches[0];
+                    if (matches.Any(c => !ReferenceEquals(c, target)))
+                    {
+                        ambiguousRows++;
+                        continue;
+                    }
+
+                    if (target.CurrentIndex != imported.CurrentIndex)
+                    {
+                        target.CurrentIndex = imported.CurrentIndex;
+                        updatedTargets.Add(target);
+                        updatedRows++;
+                    }
+                }
+            }
+            finally
+            {
+                _suppressDirty = wasSuppressDirty;
+            }
+
+            if (updatedTargets.Count > 0)
+            {
+                IsDirty = true;
+                CustomersView.Refresh();
+                NotifySummaryChanged();
+                NotifyRouteEntryProgressChanged();
+            }
+
+            return new CurrentIndexImportResult(
+                SourceRows: importedRows.Count,
+                UpdatedRows: updatedRows,
+                MissingCurrentIndexRows: missingCurrentIndexRows,
+                UnmatchedRows: unmatchedRows,
+                AmbiguousRows: ambiguousRows,
+                MissingKeyRows: missingKeyRows);
+        }
+
+        private static string BuildCurrentIndexImportSummary(CurrentIndexImportResult result)
+        {
+            return
+                $"Tong dong doc: {result.SourceRows}\n" +
+                $"Da cap nhat: {result.UpdatedRows}\n" +
+                $"Thieu chi so moi: {result.MissingCurrentIndexRows}\n" +
+                $"Khong tim thay khach: {result.UnmatchedRows}\n" +
+                $"Khoa ghep bi trung/khong ro: {result.AmbiguousRows}\n" +
+                $"Thieu khoa ghep tren dong import: {result.MissingKeyRows}";
+        }
+
+        private static string NormalizeLookupKey(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+        }
+
+        private static void RegisterUniqueLookup<TKey>(
+            IDictionary<TKey, Customer> map,
+            ISet<TKey> ambiguousKeys,
+            TKey key,
+            Customer customer)
+            where TKey : notnull
+        {
+            if (EqualityComparer<TKey>.Default.Equals(key, default!))
+            {
+                return;
+            }
+
+            if (key is string textKey && string.IsNullOrWhiteSpace(textKey))
+            {
+                return;
+            }
+
+            if (ambiguousKeys.Contains(key))
+            {
+                return;
+            }
+
+            if (map.TryGetValue(key, out var existing) && !ReferenceEquals(existing, customer))
+            {
+                map.Remove(key);
+                ambiguousKeys.Add(key);
+                return;
+            }
+
+            map[key] = customer;
         }
 
         [RelayCommand]
@@ -908,6 +1188,55 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
+        private void ImportCurrentIndexFromExcelWithDialog()
+        {
+            if (Customers.Count == 0)
+            {
+                _ui.ShowMessage("Import chi so moi", "Khong co du lieu hien tai de cap nhat.");
+                return;
+            }
+
+            var filePath = _ui.ShowOpenExcelFileDialog();
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            try
+            {
+                var wizard = _ui.ShowImportWizardDialog(
+                    filePath,
+                    ImportWizardViewModel.ImportWizardMode.CurrentIndexOnly);
+
+                if (wizard == null)
+                {
+                    return;
+                }
+
+                var importedRows = wizard.ImportedCustomers?.ToList() ?? new List<Customer>();
+                if (importedRows.Count == 0)
+                {
+                    _ui.ShowMessage("Import chi so moi", "Khong co dong hop le de cap nhat.");
+                    return;
+                }
+
+                var map = wizard.BuildConfirmedMap();
+                var result = ApplyCurrentIndexImport(importedRows, map);
+                _ui.ShowMessage("Import chi so moi", BuildCurrentIndexImportSummary(result));
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("Canh bao import chi so moi", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Loi import chi so moi", ex.Message);
+            }
+        }
+
+        [RelayCommand]
         private void ExportToExcel(string outputPath)
         {
             if (string.IsNullOrWhiteSpace(outputPath))
@@ -1033,6 +1362,7 @@ namespace ElectricCalculation.ViewModels
                     if (action == SaveSnapshotPromptAction.Overwrite)
                     {
                         ProjectFileService.Save(LoadedSnapshotPath, PeriodLabel, Customers);
+                        SaveGameService.SyncSnapshotFileToSharedStore(LoadedSnapshotPath, PeriodLabel);
                         IsDirty = false;
                         _ui.ShowMessage("Bộ dữ liệu", $"Đã ghi đè bộ dữ liệu:\n{LoadedSnapshotPath}");
                         return;
@@ -1339,7 +1669,7 @@ namespace ElectricCalculation.ViewModels
                 throw new WarningException("Đường dẫn lưu file Excel không hợp lệ.");
             }
 
-            var filtered = CustomersView.Cast<Customer>().ToList();
+            var filtered = GetCurrentViewCustomers();
             if (filtered.Count == 0)
             {
                 throw new WarningException("Không có dòng nào trong danh sách hiện tại để in.");
@@ -1417,7 +1747,7 @@ namespace ElectricCalculation.ViewModels
             {
                 var customers = SelectedCustomer != null
                     ? new List<Customer> { SelectedCustomer }
-                    : CustomersView.Cast<Customer>().ToList();
+                    : GetCurrentViewCustomers();
 
                 if (customers.Count == 0)
                 {
@@ -1511,7 +1841,7 @@ namespace ElectricCalculation.ViewModels
 
                 var customers = selectedCustomers != null && selectedCustomers.Count > 0
                     ? selectedCustomers
-                    : CustomersView.Cast<Customer>().ToList();
+                    : GetCurrentViewCustomers();
 
                 if (customers.Count == 0)
                 {
@@ -1519,36 +1849,28 @@ namespace ElectricCalculation.ViewModels
                     return;
                 }
 
-                var folder = _ui.ShowFolderPickerDialog("Chọn thư mục để lưu các hóa đơn");
-                if (string.IsNullOrWhiteSpace(folder))
+                var outputPath = _ui.ShowSaveExcelFileDialog("Hoa don tien dien - nhieu ho.xlsx");
+                if (string.IsNullOrWhiteSpace(outputPath))
                 {
                     return;
                 }
 
                 var templatePath = _ui.GetInvoiceTemplatePath();
+                InvoiceExcelExportService.ExportHouseholdsAsSingleInvoice(
+                    templatePath,
+                    outputPath,
+                    customers,
+                    PeriodLabel,
+                    InvoiceIssuer);
 
-                foreach (var customer in customers)
+                var openResult = _ui.Confirm(
+                    "In nhiều phiếu",
+                    $"Đã tạo 1 hóa đơn gộp {customers.Count} hộ tại:\n{outputPath}\n\nMở file này không?");
+
+                if (openResult)
                 {
-                    var namePart = string.IsNullOrWhiteSpace(customer.Name)
-                        ? "Khach"
-                        : customer.Name;
-
-                    var meterPart = string.IsNullOrWhiteSpace(customer.MeterNumber)
-                        ? string.Empty
-                        : $" - {customer.MeterNumber}";
-
-                    var safeName = MakeSafeFileName($"{namePart}{meterPart}");
-                    var filePath = Path.Combine(folder, $"Hoa don - {safeName}.xlsx");
-
-                    InvoiceExcelExportService.ExportInvoice(
-                        templatePath,
-                        filePath,
-                        customer,
-                        PeriodLabel,
-                        InvoiceIssuer);
+                    _ui.OpenWithDefaultApp(outputPath);
                 }
-
-                _ui.ShowMessage("In nhiều phiếu", $"Đã tạo {customers.Count} hóa đơn trong thư mục:\n{folder}");
             }
             catch (WarningException warning)
             {
@@ -1565,7 +1887,7 @@ namespace ElectricCalculation.ViewModels
         [RelayCommand]
         private void ShowReport()
         {
-            var currentItems = CustomersView.Cast<Customer>().ToList();
+            var currentItems = GetCurrentViewCustomers();
             if (currentItems.Count == 0)
             {
                 _ui.ShowMessage("Báo cáo", "Không có dữ liệu trong danh sách hiện tại để lập báo cáo.");
@@ -1651,16 +1973,12 @@ namespace ElectricCalculation.ViewModels
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(SearchText))
+            if (string.IsNullOrEmpty(_normalizedSearchKeyword))
             {
                 return true;
             }
 
-            var keyword = SearchText.Trim();
-
-            static bool ContainsKeyword(string? value, string keyword) =>
-                !string.IsNullOrWhiteSpace(value) &&
-                value.IndexOf(keyword, StringComparison.CurrentCultureIgnoreCase) >= 0;
+            var keyword = _normalizedSearchKeyword;
 
             // Fast search always includes the primary fields: name + meter + location.
             if (ContainsKeyword(customer.Name, keyword) ||
@@ -1670,52 +1988,60 @@ namespace ElectricCalculation.ViewModels
                 return true;
             }
 
-            string fieldValue = SelectedSearchField switch
-            {
-                "Nhóm / Đơn vị" => customer.GroupName ?? string.Empty,
-                "Loại" => customer.Category ?? string.Empty,
-                "Địa chỉ" => customer.Address ?? string.Empty,
-                "Số ĐT" => customer.Phone ?? string.Empty,
-                "Số công tơ" => customer.MeterNumber ?? string.Empty,
-                _ => customer.Name ?? string.Empty // Tên khách
-            };
+            string fieldValue = GetSearchFieldValue(customer, _selectedSearchFieldIndex);
 
             return ContainsKeyword(fieldValue, keyword);
         }
 
+        [RelayCommand]
+        private void ApplySearch()
+        {
+            ApplySearchCache(SearchText, SelectedSearchField);
+            RefreshCustomersViewAfterFilterChanged();
+        }
+
         partial void OnSearchTextChanged(string value)
         {
-            CustomersView.Refresh();
-            NotifySummaryChanged();
-            NotifyRouteEntryProgressChanged();
+            // Search is applied explicitly when user presses Enter.
         }
 
         partial void OnSelectedSearchFieldChanged(string value)
         {
-            CustomersView.Refresh();
-            NotifySummaryChanged();
-            NotifyRouteEntryProgressChanged();
+            // Search field is applied explicitly when user presses Enter.
         }
 
         partial void OnFilterMissingChanged(bool value)
         {
-            CustomersView.Refresh();
-            NotifySummaryChanged();
-            NotifyRouteEntryProgressChanged();
+            RefreshCustomersViewAfterFilterChanged();
         }
 
         partial void OnFilterWarningChanged(bool value)
         {
-            CustomersView.Refresh();
-            NotifySummaryChanged();
-            NotifyRouteEntryProgressChanged();
+            RefreshCustomersViewAfterFilterChanged();
         }
 
         partial void OnFilterErrorChanged(bool value)
         {
-            CustomersView.Refresh();
-            NotifySummaryChanged();
-            NotifyRouteEntryProgressChanged();
+            RefreshCustomersViewAfterFilterChanged();
+        }
+
+        private static bool ContainsKeyword(string? value, string keyword)
+        {
+            return !string.IsNullOrWhiteSpace(value) &&
+                   value.IndexOf(keyword, StringComparison.CurrentCultureIgnoreCase) >= 0;
+        }
+
+        private static string GetSearchFieldValue(Customer customer, int searchFieldIndex)
+        {
+            return searchFieldIndex switch
+            {
+                SearchFieldGroupIndex => customer.GroupName ?? string.Empty,
+                SearchFieldCategoryIndex => customer.Category ?? string.Empty,
+                SearchFieldAddressIndex => customer.Address ?? string.Empty,
+                SearchFieldPhoneIndex => customer.Phone ?? string.Empty,
+                SearchFieldMeterIndex => customer.MeterNumber ?? string.Empty,
+                _ => customer.Name ?? string.Empty
+            };
         }
 
         partial void OnSelectedCustomerChanged(Customer? value)
@@ -1752,7 +2078,7 @@ namespace ElectricCalculation.ViewModels
                 var selectedCustomers = selectedItems?.OfType<Customer>().ToList();
                 var customers = selectedCustomers != null && selectedCustomers.Count > 0
                     ? selectedCustomers
-                    : CustomersView.Cast<Customer>().ToList();
+                    : GetCurrentViewCustomers();
 
                 if (customers.Count == 0)
                 {

@@ -38,7 +38,21 @@ namespace ElectricCalculation.ViewModels
         public StartupViewModel()
         {
             _ui = new UiService();
-            _ = SampleDataService.TrySeedJune2025SampleSnapshotOnce();
+
+            try
+            {
+                SaveGameService.SyncFromSharedStoreIfEnabled();
+            }
+            catch (Exception ex)
+            {
+                HandleRequestError(ex);
+            }
+
+            if (!SaveGameService.IsSharedSyncEnabled())
+            {
+                _ = SampleDataService.TrySeedJune2025SampleSnapshotOnce();
+            }
+
             RefreshSnapshots();
         }
 
@@ -448,6 +462,19 @@ namespace ElectricCalculation.ViewModels
             catch
             {
                 // Ignore: opening a browser may fail in locked-down environments.
+            }
+        }
+
+        [RelayCommand]
+        private void ShowUserGuide()
+        {
+            try
+            {
+                _ui.ShowUserGuideDialog();
+            }
+            catch (Exception ex)
+            {
+                HandleRequestError(ex);
             }
         }
 

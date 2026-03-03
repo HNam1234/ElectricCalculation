@@ -331,6 +331,30 @@
                     </StackPanel>
                 </Grid>
             </Button>
+
+            <Button Style="{StaticResource ActionCardButtonStyle}"
+                    Command="{Binding ShowUserGuideCommand}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource IconBadgeStyle}">
+                        <TextBlock Style="{StaticResource IconGlyphStyle}" Foreground="{StaticResource Accent}" Text="&#xE897;" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                        <TextBlock Text="Hướng dẫn sử dụng"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Xem nhanh các bước tạo dữ liệu, nhập chỉ số, lưu và xuất hóa đơn."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
         </StackPanel>
 
         <!-- Right: Recent datasets -->

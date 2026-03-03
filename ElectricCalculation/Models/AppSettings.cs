@@ -2,6 +2,8 @@ namespace ElectricCalculation.Models
 {
     public sealed class AppSettings
     {
+        public string SharedSyncDatabasePath { get; set; } = string.Empty;
+
         public decimal DefaultUnitPrice { get; set; }
 
         public decimal DefaultMultiplier { get; set; } = 1m;

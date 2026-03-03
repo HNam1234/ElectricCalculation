@@ -210,6 +210,8 @@
                 <Separator />
                 <MenuItem Header="Import từ Excel..."
                           Command="{Binding ImportFromExcelWithDialogCommand}" />
+                <MenuItem Header="Import chỉ số mới từ Excel..."
+                          Command="{Binding ImportCurrentIndexFromExcelWithDialogCommand}" />
                 <MenuItem Header="Export bảng kê ra Excel..."
                           Command="{Binding ExportToExcelWithDialogCommand}" />
             </MenuItem>
@@ -258,6 +260,7 @@
                 <MenuItem Header="Thống kê theo nhóm..."
                           Command="{Binding ShowReportCommand}" />
             </MenuItem>
+
         </Menu>
 
         <StackPanel Grid.Row="1" Margin="0,0,0,8">
@@ -308,7 +311,14 @@
                                  Width="220"
                                  Margin="4,0,0,0"
                                  VerticalAlignment="Center"
-                                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                 ToolTip="Nhấn Enter để tìm kiếm"
+                                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Enter"
+                                            Command="{Binding ApplySearchCommand}" />
+                            </TextBox.InputBindings>
+                        </TextBox>
+
                     </StackPanel>
 
                     <StackPanel Grid.Row="1"

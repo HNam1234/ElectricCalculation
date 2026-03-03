@@ -301,7 +301,7 @@
                                        Foreground="{StaticResource TextMuted}"
                                        TextWrapping="Wrap" />
 
-                            <TextBlock Text="* Bắt buộc: Tên khách"
+                            <TextBlock Text="{Binding RequiredPrimaryText}"
                                        Margin="0,6,0,0"
                                        FontWeight="SemiBold"
                                        TextWrapping="Wrap">
@@ -318,7 +318,7 @@
                                 </TextBlock.Style>
                             </TextBlock>
 
-                            <TextBlock Text="* Bắt buộc: Chọn ít nhất 1 trong: Số công tơ / Chỉ số cũ / Chỉ số mới / Đơn giá"
+                            <TextBlock Text="{Binding RequiredSecondaryText}"
                                        Margin="0,2,0,0"
                                        FontWeight="SemiBold"
                                        TextWrapping="Wrap">

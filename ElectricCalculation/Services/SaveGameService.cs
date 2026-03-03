@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using ElectricCalculation.Models;
 using System.Text.Json;
+using ElectricCalculation.Models;
 
 namespace ElectricCalculation.Services
 {
@@ -13,10 +14,32 @@ namespace ElectricCalculation.Services
 
         public sealed record SnapshotInfo(string Path, string PeriodLabel, string? SnapshotName, DateTime SavedAt);
 
+        public static bool IsSharedSyncEnabled()
+        {
+            return SharedSnapshotDatabaseService.IsEnabled();
+        }
+
         public static string GetSaveRootDirectory()
         {
             var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             return Path.Combine(documents, "ElectricCalculation", "Saves");
+        }
+
+        public static void SyncFromSharedStoreIfEnabled()
+        {
+            var root = GetSaveRootDirectory();
+            Directory.CreateDirectory(root);
+
+            if (!IsSharedSyncEnabled())
+            {
+                return;
+            }
+
+            var records = SharedSnapshotDatabaseService.ListSnapshots(maxCount: 5000);
+            foreach (var record in records)
+            {
+                SharedSnapshotDatabaseService.MaterializeToLocal(root, record);
+            }
         }
 
         public static string SaveSnapshot(string periodLabel, IEnumerable<Customer> customers, string? snapshotName = null)
@@ -40,18 +63,49 @@ namespace ElectricCalculation.Services
             ProjectFileService.Save(path, periodLabel ?? string.Empty, customers);
             TrimOldSnapshots(folder);
 
+            if (IsSharedSyncEnabled())
+            {
+                var savedAtUtc = File.GetLastWriteTimeUtc(path);
+                SharedSnapshotDatabaseService.UpsertSnapshot(
+                    saveRootDirectory: GetSaveRootDirectory(),
+                    snapshotPath: path,
+                    periodLabel: periodLabel ?? string.Empty,
+                    snapshotName: snapshotName,
+                    savedAtUtc: savedAtUtc);
+            }
+
             return path;
         }
 
         public static IReadOnlyList<SnapshotInfo> ListSnapshots(int maxCount = 50)
         {
-            var root = GetSaveRootDirectory();
-            if (!Directory.Exists(root))
+            if (maxCount <= 0)
             {
                 return Array.Empty<SnapshotInfo>();
             }
 
-            if (maxCount <= 0)
+            var root = GetSaveRootDirectory();
+            Directory.CreateDirectory(root);
+
+            if (IsSharedSyncEnabled())
+            {
+                var records = SharedSnapshotDatabaseService.ListSnapshots(maxCount);
+                var synced = new List<SnapshotInfo>(records.Count);
+
+                foreach (var record in records)
+                {
+                    var localPath = SharedSnapshotDatabaseService.MaterializeToLocal(root, record);
+                    synced.Add(new SnapshotInfo(
+                        localPath,
+                        record.PeriodLabel,
+                        record.SnapshotName,
+                        record.SavedAtUtc.ToLocalTime()));
+                }
+
+                return synced;
+            }
+
+            if (!Directory.Exists(root))
             {
                 return Array.Empty<SnapshotInfo>();
             }
@@ -74,13 +128,34 @@ namespace ElectricCalculation.Services
             return result;
         }
 
+        public static void SyncSnapshotFileToSharedStore(string snapshotPath, string periodLabel)
+        {
+            if (!IsSharedSyncEnabled() || string.IsNullOrWhiteSpace(snapshotPath))
+            {
+                return;
+            }
+
+            if (!File.Exists(snapshotPath))
+            {
+                throw new WarningException("Khong tim thay file snapshot de dong bo.");
+            }
+
+            var snapshotName = TryReadSnapshotNameFromFileName(Path.GetFileName(snapshotPath));
+            SharedSnapshotDatabaseService.UpsertSnapshot(
+                saveRootDirectory: GetSaveRootDirectory(),
+                snapshotPath: snapshotPath,
+                periodLabel: periodLabel ?? string.Empty,
+                snapshotName: snapshotName,
+                savedAtUtc: File.GetLastWriteTimeUtc(snapshotPath));
+        }
+
         public static bool TryDeleteSnapshot(string snapshotPath, out string? error)
         {
             error = null;
 
             if (string.IsNullOrWhiteSpace(snapshotPath))
             {
-                error = "Đường dẫn snapshot trống.";
+                error = "Duong dan snapshot trong.";
                 return false;
             }
 
@@ -88,26 +163,40 @@ namespace ElectricCalculation.Services
             {
                 if (!string.Equals(Path.GetExtension(snapshotPath), ".json", StringComparison.OrdinalIgnoreCase))
                 {
-                    error = "Snapshot không hợp lệ (không phải file .json).";
+                    error = "Snapshot khong hop le (khong phai file .json).";
                     return false;
                 }
 
-                var root = Path.GetFullPath(GetSaveRootDirectory());
+                var root = Path.GetFullPath(GetSaveRootDirectory())
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var rootWithSeparator = root + Path.DirectorySeparatorChar;
                 var fullPath = Path.GetFullPath(snapshotPath);
-                if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+
+                if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase))
                 {
-                    error = "Chỉ cho phép xóa snapshot trong thư mục snapshot.";
+                    error = "Chi cho phep xoa snapshot trong thu muc snapshot.";
                     return false;
                 }
 
-                if (!File.Exists(fullPath))
+                if (IsSharedSyncEnabled())
                 {
-                    error = "Snapshot không còn tồn tại.";
-                    return false;
+                    SharedSnapshotDatabaseService.DeleteSnapshot(GetSaveRootDirectory(), fullPath);
                 }
 
-                File.Delete(fullPath);
-                return true;
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                    return true;
+                }
+
+                if (IsSharedSyncEnabled())
+                {
+                    return true;
+                }
+
+                error = "Snapshot khong con ton tai.";
+                return false;
             }
             catch (Exception ex)
             {

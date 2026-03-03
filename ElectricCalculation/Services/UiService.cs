@@ -166,6 +166,25 @@ namespace ElectricCalculation.Services
             dialog.ShowDialog();
         }
 
+        public void ShowUserGuideDialog()
+        {
+            var owner = GetOwner();
+            var steps = UserGuideSnapshotService.BuildGuideSteps(owner);
+            if (steps.Count == 0)
+            {
+                throw new WarningException("Không thể tạo ảnh hướng dẫn. Hãy thử mở lại hướng dẫn sau.");
+            }
+
+            var vm = new UserGuideViewModel(steps);
+            var dialog = new UserGuideWindow
+            {
+                Owner = owner,
+                DataContext = vm
+            };
+
+            dialog.ShowDialog();
+        }
+
         public (bool? Result, SaveSnapshotPromptAction Action, string SnapshotName) ShowSaveSnapshotPrompt(
             string periodLabel,
             int customerCount,
@@ -195,9 +214,11 @@ namespace ElectricCalculation.Services
             return dialog.ShowDialog() == true ? vm.BuildSettings() : null;
         }
 
-        public ImportWizardViewModel? ShowImportWizardDialog(string filePath)
+        public ImportWizardViewModel? ShowImportWizardDialog(
+            string filePath,
+            ImportWizardViewModel.ImportWizardMode mode = ImportWizardViewModel.ImportWizardMode.FullDataset)
         {
-            var vm = new ImportWizardViewModel(this, filePath);
+            var vm = new ImportWizardViewModel(this, filePath, mode);
             var dialog = new ImportWizardWindow
             {
                 Owner = GetOwner(),
@@ -332,4 +353,3 @@ namespace ElectricCalculation.Services
         }
     }
 }
-

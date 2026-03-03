@@ -8,6 +8,8 @@ namespace ElectricCalculation.ViewModels
 {
     public partial class SettingsViewModel : ObservableObject
     {
+        private readonly string _sharedSyncDatabasePath;
+
         [ObservableProperty]
         private bool? dialogResult;
 
@@ -38,6 +40,7 @@ namespace ElectricCalculation.ViewModels
         public SettingsViewModel(AppSettings settings)
         {
             var s = settings ?? new AppSettings();
+            _sharedSyncDatabasePath = s.SharedSyncDatabasePath ?? string.Empty;
             DefaultUnitPrice = s.DefaultUnitPrice.ToString("0.##", CultureInfo.CurrentCulture);
             DefaultMultiplier = s.DefaultMultiplier.ToString("0.##", CultureInfo.CurrentCulture);
             DefaultSubsidizedKwh = s.DefaultSubsidizedKwh.ToString("0.##", CultureInfo.CurrentCulture);
@@ -65,6 +68,7 @@ namespace ElectricCalculation.ViewModels
 
             return new AppSettings
             {
+                SharedSyncDatabasePath = _sharedSyncDatabasePath,
                 DefaultUnitPrice = unitPrice,
                 DefaultMultiplier = multiplier,
                 DefaultSubsidizedKwh = subsidizedKwh,

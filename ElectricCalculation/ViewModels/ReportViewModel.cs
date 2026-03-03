@@ -192,7 +192,10 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
-            var customers = GetCustomersForGroup(item).ToList();
+            var customers = GetCustomersForGroup(item)
+                .OrderBy(c => c.SequenceNumber)
+                .ToList();
+
             if (customers.Count == 0)
             {
                 _ui.ShowMessage("In hóa đơn nhóm", "Nhóm được chọn hiện không có dữ liệu khách hàng.");
@@ -201,27 +204,10 @@ namespace ElectricCalculation.ViewModels
 
             try
             {
-                var previewLines = customers
-                    .OrderBy(c => c.SequenceNumber)
-                    .Take(25)
-                    .Select(c =>
-                    {
-                        var name = string.IsNullOrWhiteSpace(c.Name) ? "(Không tên)" : c.Name.Trim();
-                        var meter = string.IsNullOrWhiteSpace(c.MeterNumber) ? string.Empty : $" - {c.MeterNumber.Trim()}";
-                        return $"{c.SequenceNumber:0000} - {name}{meter}";
-                    })
-                    .ToList();
-
-                var previewText = string.Join("\n", previewLines);
-                if (customers.Count > previewLines.Count)
-                {
-                    previewText += $"\n... ({customers.Count - previewLines.Count} khách nữa)";
-                }
-
-                var groupName = string.IsNullOrWhiteSpace(item.GroupName) ? "(Không có nhóm)" : item.GroupName;
+                var groupName = string.IsNullOrWhiteSpace(item.GroupName) ? "(Không có nhóm)" : item.GroupName.Trim();
                 var confirm = _ui.Confirm(
                     "In hóa đơn nhóm",
-                    $"Nhóm: {groupName}\nSố khách: {customers.Count}\n\nDanh sách:\n{previewText}\n\nXuất hóa đơn Excel theo nhóm?");
+                    $"Nhóm: {groupName}\nSố khách: {customers.Count}\n\nXuất 1 hóa đơn gộp cho nhóm này?");
 
                 if (!confirm)
                 {
@@ -239,16 +225,16 @@ namespace ElectricCalculation.ViewModels
                 }
 
                 var templatePath = _ui.GetInvoiceTemplatePath();
-                var ordered = customers.OrderBy(c => c.SequenceNumber).ToList();
-
-                InvoiceExcelExportService.ExportInvoicesToWorkbook(
+                InvoiceExcelExportService.ExportHouseholdsAsSingleInvoice(
                     templatePath,
                     outputPath,
-                    ordered,
+                    customers,
                     _periodLabel,
                     _issuerName);
 
-                _ui.ShowMessage("In hóa đơn nhóm", $"Đã tạo file Excel tại:\n{outputPath}");
+                _ui.ShowMessage(
+                    "In hóa đơn nhóm",
+                    $"Đã tạo 1 hóa đơn gộp {customers.Count} hộ cho nhóm '{groupName}' tại:\n{outputPath}");
             }
             catch (WarningException warning)
             {
@@ -260,6 +246,112 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
+        [RelayCommand]
+        private void PrintAllGroups()
+        {
+            var groupedItems = Items
+                .OrderBy(i => i.GroupName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            if (groupedItems.Count == 0)
+            {
+                _ui.ShowMessage("In hóa đơn theo nhóm", "Không có nhóm nào để xuất.");
+                return;
+            }
+
+            var confirm = _ui.Confirm(
+                "In hóa đơn theo nhóm",
+                $"Sẽ xuất {groupedItems.Count} hóa đơn (mỗi nhóm 1 hóa đơn gộp). Tiếp tục?");
+            if (!confirm)
+            {
+                return;
+            }
+
+            var folderPath = _ui.ShowFolderPickerDialog("Chọn thư mục để lưu hóa đơn theo nhóm");
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(folderPath);
+                var templatePath = _ui.GetInvoiceTemplatePath();
+                var usedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                var successCount = 0;
+                var failedGroups = new List<string>();
+
+                foreach (var group in groupedItems)
+                {
+                    var groupName = string.IsNullOrWhiteSpace(group.GroupName) ? "(Không có nhóm)" : group.GroupName.Trim();
+                    var customers = GetCustomersForGroup(group)
+                        .OrderBy(c => c.SequenceNumber)
+                        .ToList();
+
+                    if (customers.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var safeGroupName = MakeSafeFileName(groupName);
+                        var outputPath = BuildUniqueFilePath(
+                            folderPath,
+                            $"Hoa don - {safeGroupName}.xlsx",
+                            usedPaths);
+
+                        InvoiceExcelExportService.ExportHouseholdsAsSingleInvoice(
+                            templatePath,
+                            outputPath,
+                            customers,
+                            _periodLabel,
+                            _issuerName);
+
+                        successCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failedGroups.Add($"{groupName}: {ex.Message}");
+                    }
+                }
+
+                var message =
+                    $"Đã xuất {successCount}/{groupedItems.Count} hóa đơn theo nhóm tại:\n{folderPath}";
+
+                if (failedGroups.Count > 0)
+                {
+                    var preview = string.Join("\n", failedGroups.Take(8));
+                    if (failedGroups.Count > 8)
+                    {
+                        preview += $"\n... ({failedGroups.Count - 8} nhóm nữa)";
+                    }
+
+                    message += $"\n\nKhông xuất được {failedGroups.Count} nhóm:\n{preview}";
+                }
+
+                _ui.ShowMessage("In hóa đơn theo nhóm", message);
+
+                if (successCount > 0)
+                {
+                    var openFolder = _ui.Confirm("In hóa đơn theo nhóm", "Mở thư mục kết quả?");
+                    if (openFolder)
+                    {
+                        _ui.OpenWithDefaultApp(folderPath);
+                    }
+                }
+            }
+            catch (WarningException warning)
+            {
+                _ui.ShowMessage("In hóa đơn theo nhóm", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                _ui.ShowMessage("Lỗi in hóa đơn theo nhóm", ex.Message);
+            }
+        }
+
         private static string MakeSafeFileName(string name)
         {
             foreach (var c in Path.GetInvalidFileNameChars())
@@ -268,6 +360,32 @@ namespace ElectricCalculation.ViewModels
             }
 
             return string.IsNullOrWhiteSpace(name) ? "Hoa_don" : name;
+        }
+
+        private static string BuildUniqueFilePath(string folderPath, string fileName, ISet<string> usedPaths)
+        {
+            var baseName = Path.GetFileNameWithoutExtension(fileName);
+            var extension = Path.GetExtension(fileName);
+
+            for (var index = 1; index <= 10000; index++)
+            {
+                var candidateName = index == 1
+                    ? $"{baseName}{extension}"
+                    : $"{baseName} ({index}){extension}";
+                var candidatePath = Path.Combine(folderPath, candidateName);
+
+                if (File.Exists(candidatePath))
+                {
+                    continue;
+                }
+
+                if (usedPaths.Add(candidatePath))
+                {
+                    return candidatePath;
+                }
+            }
+
+            return Path.Combine(folderPath, $"{baseName}-{Guid.NewGuid():N}{extension}");
         }
 
         public IEnumerable<Customer> GetCustomersForGroup(ReportItem? item)
