@@ -10,8 +10,10 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Data;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ElectricCalculation.Helpers;
 using ElectricCalculation.Models;
 using ElectricCalculation.Services;
 
@@ -26,6 +28,17 @@ namespace ElectricCalculation.ViewModels
         private bool _suppressDirty;
         private string _normalizedSearchKeyword = string.Empty;
         private int _selectedSearchFieldIndex;
+        private IReadOnlyList<Customer> _viewCustomersSnapshot = Array.Empty<Customer>();
+        private int _summaryCustomerCount;
+        private int _summaryCompletedCount;
+        private int _summaryMissingCount;
+        private int _summaryWarningCount;
+        private int _summaryErrorCount;
+        private decimal _summaryTotalConsumption;
+        private decimal _summaryTotalChargeableKwh;
+        private decimal _summaryTotalAmount;
+        private readonly DispatcherTimer _summaryRecalcTimer;
+        private readonly HashSet<Customer> _subscribedCustomers = new();
 
         private const int SearchFieldNameIndex = 0;
         private const int SearchFieldGroupIndex = 1;
@@ -79,7 +92,7 @@ namespace ElectricCalculation.ViewModels
 
         public string RouteEntryProgressText => BuildRouteEntryProgressText();
 
-        public ObservableCollection<Customer> Customers { get; } = new();
+        public ObservableRangeCollection<Customer> Customers { get; } = new();
 
         public ICollectionView CustomersView { get; }
 
@@ -143,6 +156,17 @@ namespace ElectricCalculation.ViewModels
             CustomersView = CollectionViewSource.GetDefaultView(Customers);
             CustomersView.Filter = FilterCustomer;
             Customers.CollectionChanged += Customers_CollectionChanged;
+
+            _summaryRecalcTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromMilliseconds(150)
+            };
+            _summaryRecalcTimer.Tick += (_, _) =>
+            {
+                _summaryRecalcTimer.Stop();
+                RecalculateViewSnapshotAndSummary();
+            };
+
             ApplyRouteEntrySort();
 
             if (SearchFields.Count > 0)
@@ -151,6 +175,7 @@ namespace ElectricCalculation.ViewModels
             }
 
             ApplySearchCache(SearchText, SelectedSearchField);
+            RecalculateViewSnapshotAndSummary();
 
             PeriodLabel = $"Tháng {DateTime.Now.Month:00}/{DateTime.Now.Year}";
             IsDirty = false;
@@ -241,11 +266,7 @@ namespace ElectricCalculation.ViewModels
                 _suppressDirty = true;
                 _undoRedo.Clear();
 
-                Customers.Clear();
-                foreach (var c in customers)
-                {
-                    Customers.Add(c);
-                }
+                Customers.ReplaceRange(customers);
 
                 if (!string.IsNullOrWhiteSpace(period))
                 {
@@ -257,6 +278,7 @@ namespace ElectricCalculation.ViewModels
                 LoadedSnapshotPath = null;
                 IsDirty = false;
                 RefreshUsageAverages();
+                RecalculateViewSnapshotAndSummary();
             }
             finally
             {
@@ -338,22 +360,7 @@ namespace ElectricCalculation.ViewModels
         // Totals for the current (filtered) view.
         private IReadOnlyList<Customer> TryGetViewCustomersSnapshot()
         {
-            try
-            {
-                if (CustomersView == null)
-                {
-                    return TryGetCustomersSnapshot();
-                }
-
-                return CustomersView
-                    .Cast<object>()
-                    .OfType<Customer>()
-                    .ToList();
-            }
-            catch
-            {
-                return TryGetCustomersSnapshot();
-            }
+            return _viewCustomersSnapshot.Count > 0 ? _viewCustomersSnapshot : TryGetCustomersSnapshot();
         }
 
         private IReadOnlyList<Customer> TryGetCustomersSnapshot()
@@ -368,39 +375,46 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
-        private List<Customer> GetCurrentViewCustomers()
+        private void EnsureViewSnapshotUpToDate()
         {
-            return CustomersView.Cast<Customer>().ToList();
+            if (_summaryRecalcTimer.IsEnabled)
+            {
+                RecalculateViewSnapshotAndSummary();
+            }
         }
 
-        public int CustomerCount => TryGetViewCustomersSnapshot().Count;
+        private List<Customer> GetCurrentViewCustomers()
+        {
+            EnsureViewSnapshotUpToDate();
+            return TryGetViewCustomersSnapshot().ToList();
+        }
 
-        public decimal TotalConsumption => TryGetViewCustomersSnapshot().Sum(c => c.Consumption);
+        public int CustomerCount => _summaryCustomerCount;
 
-        public decimal TotalChargeableKwh => TryGetViewCustomersSnapshot().Sum(c => c.ChargeableKwh);
+        public decimal TotalConsumption => _summaryTotalConsumption;
 
-        public decimal TotalAmount => TryGetViewCustomersSnapshot().Sum(c => c.Amount);
+        public decimal TotalChargeableKwh => _summaryTotalChargeableKwh;
 
-        public int CompletedCount => TryGetViewCustomersSnapshot().Count(c => c.CurrentIndex != null);
+        public decimal TotalAmount => _summaryTotalAmount;
 
-        public int MissingCount => TryGetViewCustomersSnapshot().Count(c => c.IsMissingReading);
+        public int CompletedCount => _summaryCompletedCount;
 
-        public int WarningCount => TryGetViewCustomersSnapshot().Count(c => c.HasUsageWarning);
+        public int MissingCount => _summaryMissingCount;
 
-        public int ErrorCount => TryGetViewCustomersSnapshot().Count(c => c.HasReadingError);
+        public int WarningCount => _summaryWarningCount;
+
+        public int ErrorCount => _summaryErrorCount;
 
         public double CompletionRatio
         {
             get
             {
-                var customers = TryGetViewCustomersSnapshot();
-                if (customers.Count <= 0)
+                if (_summaryCustomerCount <= 0)
                 {
                     return 0;
                 }
 
-                var completed = customers.Count(c => c.CurrentIndex != null);
-                var ratio = (double)completed / customers.Count;
+                var ratio = (double)_summaryCompletedCount / _summaryCustomerCount;
 
                 if (double.IsNaN(ratio) || double.IsInfinity(ratio))
                 {
@@ -413,6 +427,125 @@ namespace ElectricCalculation.ViewModels
 
         private void NotifySummaryChanged()
         {
+            ScheduleSummaryRecalc();
+        }
+
+        private void ScheduleSummaryRecalc()
+        {
+            _summaryRecalcTimer.Stop();
+            _summaryRecalcTimer.Start();
+        }
+
+        private void RecalculateViewSnapshotAndSummary()
+        {
+            _summaryRecalcTimer.Stop();
+
+            try
+            {
+                var completedCount = 0;
+                var missingCount = 0;
+                var warningCount = 0;
+                var errorCount = 0;
+                decimal totalConsumption = 0;
+                decimal totalChargeable = 0;
+                decimal totalAmount = 0;
+
+                var viewItems = new List<Customer>();
+                foreach (var item in CustomersView)
+                {
+                    if (item is not Customer customer)
+                    {
+                        continue;
+                    }
+
+                    viewItems.Add(customer);
+
+                    totalConsumption += customer.Consumption;
+                    totalChargeable += customer.ChargeableKwh;
+                    totalAmount += customer.Amount;
+
+                    if (customer.CurrentIndex != null)
+                    {
+                        completedCount++;
+                    }
+
+                    if (customer.IsMissingReading)
+                    {
+                        missingCount++;
+                    }
+
+                    if (customer.HasUsageWarning)
+                    {
+                        warningCount++;
+                    }
+
+                    if (customer.HasReadingError)
+                    {
+                        errorCount++;
+                    }
+                }
+
+                _viewCustomersSnapshot = viewItems;
+
+                _summaryCustomerCount = viewItems.Count;
+                _summaryCompletedCount = completedCount;
+                _summaryMissingCount = missingCount;
+                _summaryWarningCount = warningCount;
+                _summaryErrorCount = errorCount;
+                _summaryTotalConsumption = totalConsumption;
+                _summaryTotalChargeableKwh = totalChargeable;
+                _summaryTotalAmount = totalAmount;
+            }
+            catch
+            {
+                var customers = TryGetCustomersSnapshot();
+                _viewCustomersSnapshot = customers;
+
+                var completedCount = 0;
+                var missingCount = 0;
+                var warningCount = 0;
+                var errorCount = 0;
+                decimal totalConsumption = 0;
+                decimal totalChargeable = 0;
+                decimal totalAmount = 0;
+
+                foreach (var customer in customers)
+                {
+                    totalConsumption += customer.Consumption;
+                    totalChargeable += customer.ChargeableKwh;
+                    totalAmount += customer.Amount;
+
+                    if (customer.CurrentIndex != null)
+                    {
+                        completedCount++;
+                    }
+
+                    if (customer.IsMissingReading)
+                    {
+                        missingCount++;
+                    }
+
+                    if (customer.HasUsageWarning)
+                    {
+                        warningCount++;
+                    }
+
+                    if (customer.HasReadingError)
+                    {
+                        errorCount++;
+                    }
+                }
+
+                _summaryCustomerCount = customers.Count;
+                _summaryCompletedCount = completedCount;
+                _summaryMissingCount = missingCount;
+                _summaryWarningCount = warningCount;
+                _summaryErrorCount = errorCount;
+                _summaryTotalConsumption = totalConsumption;
+                _summaryTotalChargeableKwh = totalChargeable;
+                _summaryTotalAmount = totalAmount;
+            }
+
             OnPropertyChanged(nameof(CustomerCount));
             OnPropertyChanged(nameof(CompletedCount));
             OnPropertyChanged(nameof(MissingCount));
@@ -422,6 +555,11 @@ namespace ElectricCalculation.ViewModels
             OnPropertyChanged(nameof(TotalConsumption));
             OnPropertyChanged(nameof(TotalChargeableKwh));
             OnPropertyChanged(nameof(TotalAmount));
+
+            if (IsRouteEntryMode)
+            {
+                NotifyRouteEntryProgressChanged();
+            }
         }
 
         private void NotifyRouteEntryProgressChanged()
@@ -479,6 +617,7 @@ namespace ElectricCalculation.ViewModels
 
             view.CustomSort = IsRouteEntryMode ? CustomerRouteComparer.Instance : null;
             CustomersView.Refresh();
+            NotifySummaryChanged();
         }
 
         [RelayCommand]
@@ -508,7 +647,7 @@ namespace ElectricCalculation.ViewModels
             }
 
             SelectedCustomer = null;
-            Customers.Clear();
+            var prepared = new List<Customer>(imported.Count);
             foreach (var customer in imported)
             {
                 if (!string.IsNullOrWhiteSpace(InvoiceIssuer) && string.IsNullOrWhiteSpace(customer.PerformedBy))
@@ -517,14 +656,16 @@ namespace ElectricCalculation.ViewModels
                 }
 
                 ApplyDefaultsIfNeeded(customer, applyWhen: _settings.ApplyDefaultsOnImport);
-                Customers.Add(customer);
+                prepared.Add(customer);
             }
 
+            Customers.ReplaceRange(prepared);
             _undoRedo.Clear();
             LoadedSnapshotPath = null;
 
             RefreshUsageAverages();
             AutoSaveImportedSnapshot();
+            RecalculateViewSnapshotAndSummary();
         }
 
         private void AutoSaveImportedSnapshot()
@@ -1529,17 +1670,14 @@ namespace ElectricCalculation.ViewModels
                 }
             }
 
-            Customers.Clear();
-            foreach (var c in newCustomers)
-            {
-                Customers.Add(c);
-            }
+            Customers.ReplaceRange(newCustomers);
 
             SelectedCustomer = null;
             PeriodLabel = vm.PeriodLabel;
             CurrentDataFilePath = null;
             LoadedSnapshotPath = null;
             RefreshUsageAverages();
+            RecalculateViewSnapshotAndSummary();
         }
 
         private static bool TryGetNextPeriod(string? periodLabel, out int month, out int year)
@@ -1904,19 +2042,45 @@ namespace ElectricCalculation.ViewModels
                 IsDirty = true;
             }
 
-            if (e.OldItems != null)
+            if (e.Action == NotifyCollectionChangedAction.Reset)
             {
-                foreach (var item in e.OldItems.OfType<Customer>())
+                foreach (var customer in _subscribedCustomers)
                 {
-                    item.PropertyChanged -= Customer_PropertyChanged;
+                    customer.PropertyChanged -= Customer_PropertyChanged;
+                }
+
+                _subscribedCustomers.Clear();
+
+                foreach (var customer in Customers)
+                {
+                    if (_subscribedCustomers.Add(customer))
+                    {
+                        customer.PropertyChanged += Customer_PropertyChanged;
+                    }
                 }
             }
-
-            if (e.NewItems != null)
+            else
             {
-                foreach (var item in e.NewItems.OfType<Customer>())
+                if (e.OldItems != null)
                 {
-                    item.PropertyChanged += Customer_PropertyChanged;
+                    foreach (var item in e.OldItems.OfType<Customer>())
+                    {
+                        if (_subscribedCustomers.Remove(item))
+                        {
+                            item.PropertyChanged -= Customer_PropertyChanged;
+                        }
+                    }
+                }
+
+                if (e.NewItems != null)
+                {
+                    foreach (var item in e.NewItems.OfType<Customer>())
+                    {
+                        if (_subscribedCustomers.Add(item))
+                        {
+                            item.PropertyChanged += Customer_PropertyChanged;
+                        }
+                    }
                 }
             }
 
@@ -1949,6 +2113,7 @@ namespace ElectricCalculation.ViewModels
                  e.PropertyName == nameof(Customer.SequenceNumber)))
             {
                 CustomersView.Refresh();
+                NotifySummaryChanged();
                 NotifyRouteEntryProgressChanged();
             }
         }
