@@ -982,7 +982,6 @@ namespace ElectricCalculation.Services
         {
             var parts = new List<string>();
             AddMultiHouseholdDetailPart(parts, customer.Location, baseName);
-            AddMultiHouseholdDetailPart(parts, customer.Page, baseName, "Trang ");
             AddMultiHouseholdDetailPart(parts, customer.MeterNumber, baseName, "Công tơ ");
             AddMultiHouseholdDetailPart(parts, customer.BuildingName, baseName, "Mã sổ ");
             AddMultiHouseholdDetailPart(parts, customer.Address, baseName);
