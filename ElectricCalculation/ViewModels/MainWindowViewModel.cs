@@ -672,7 +672,7 @@ namespace ElectricCalculation.ViewModels
         {
             try
             {
-                var snapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers, snapshotName: "Thang moi");
+                var snapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers, snapshotName: "Tháng mới");
                 LoadedSnapshotPath = snapshotPath;
                 IsDirty = false;
             }
@@ -681,7 +681,7 @@ namespace ElectricCalculation.ViewModels
                 Debug.WriteLine(ex);
                 LoadedSnapshotPath = null;
                 IsDirty = true;
-                _ui.ShowMessage("Canh bao import Excel", $"Da import nhung tu dong luu that bai:\n{ex.Message}");
+                _ui.ShowMessage("Cảnh báo import Excel", $"Đã import nhưng tự động lưu thất bại:\n{ex.Message}");
             }
         }
 
@@ -695,7 +695,8 @@ namespace ElectricCalculation.ViewModels
 
         private CurrentIndexImportResult ApplyCurrentIndexImport(
             IReadOnlyList<Customer> importedRows,
-            IReadOnlyDictionary<ExcelImportService.ImportField, string> map)
+            IReadOnlyDictionary<ExcelImportService.ImportField, string> map,
+            bool preferBestKeyPerRow = false)
         {
             var matchByMeter = map.ContainsKey(ExcelImportService.ImportField.MeterNumber);
             var matchBySequence = map.ContainsKey(ExcelImportService.ImportField.SequenceNumber);
@@ -703,7 +704,7 @@ namespace ElectricCalculation.ViewModels
 
             if (!matchByMeter && !matchBySequence && !matchByName)
             {
-                throw new WarningException("Can chon it nhat 1 khoa ghep: So cong to / So thu tu / Ten khach.");
+                throw new WarningException("Cần chọn ít nhất 1 khóa ghép: Số công tơ / Số thứ tự / Tên khách.");
             }
 
             var byMeter = new Dictionary<string, Customer>(StringComparer.OrdinalIgnoreCase);
@@ -748,6 +749,81 @@ namespace ElectricCalculation.ViewModels
                     if (!imported.CurrentIndex.HasValue)
                     {
                         missingCurrentIndexRows++;
+                        continue;
+                    }
+
+                    if (preferBestKeyPerRow)
+                    {
+                        // One-column import: avoid matching by name when meter/sequence is present.
+                        // This prevents wrong updates when the same household exists in 1 pha/3 pha rows.
+                        Customer? bestTarget = null;
+
+                        if (matchByMeter)
+                        {
+                            var meterKey = NormalizeLookupKey(imported.MeterNumber);
+                            if (!string.IsNullOrWhiteSpace(meterKey))
+                            {
+                                if (ambiguousMeters.Contains(meterKey))
+                                {
+                                    ambiguousRows++;
+                                    continue;
+                                }
+
+                                if (!byMeter.TryGetValue(meterKey, out bestTarget))
+                                {
+                                    unmatchedRows++;
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if (bestTarget == null && matchBySequence && imported.SequenceNumber > 0)
+                        {
+                            if (ambiguousSequences.Contains(imported.SequenceNumber))
+                            {
+                                ambiguousRows++;
+                                continue;
+                            }
+
+                            if (!bySequence.TryGetValue(imported.SequenceNumber, out bestTarget))
+                            {
+                                unmatchedRows++;
+                                continue;
+                            }
+                        }
+
+                        if (bestTarget == null && matchByName)
+                        {
+                            var nameKey = NormalizeLookupKey(imported.Name);
+                            if (!string.IsNullOrWhiteSpace(nameKey))
+                            {
+                                if (ambiguousNames.Contains(nameKey))
+                                {
+                                    ambiguousRows++;
+                                    continue;
+                                }
+
+                                if (!byName.TryGetValue(nameKey, out bestTarget))
+                                {
+                                    unmatchedRows++;
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if (bestTarget == null)
+                        {
+                            missingKeyRows++;
+                            continue;
+                        }
+
+                        if (bestTarget.CurrentIndex != imported.CurrentIndex)
+                        {
+                            bestTarget.CurrentIndex = imported.CurrentIndex;
+                            updatedTargets.Add(bestTarget);
+                            updatedRows++;
+                        }
+
                         continue;
                     }
 
@@ -862,12 +938,12 @@ namespace ElectricCalculation.ViewModels
         private static string BuildCurrentIndexImportSummary(CurrentIndexImportResult result)
         {
             return
-                $"Tong dong doc: {result.SourceRows}\n" +
-                $"Da cap nhat: {result.UpdatedRows}\n" +
-                $"Thieu chi so moi: {result.MissingCurrentIndexRows}\n" +
-                $"Khong tim thay khach: {result.UnmatchedRows}\n" +
-                $"Khoa ghep bi trung/khong ro: {result.AmbiguousRows}\n" +
-                $"Thieu khoa ghep tren dong import: {result.MissingKeyRows}";
+                $"Tổng dòng đọc: {result.SourceRows}\n" +
+                $"Đã cập nhật: {result.UpdatedRows}\n" +
+                $"Thiếu chỉ số mới: {result.MissingCurrentIndexRows}\n" +
+                $"Không tìm thấy khách: {result.UnmatchedRows}\n" +
+                $"Khóa ghép bị trùng/không rõ: {result.AmbiguousRows}\n" +
+                $"Thiếu khóa ghép trên dòng import: {result.MissingKeyRows}";
         }
 
         private static string NormalizeLookupKey(string? value)
@@ -1333,7 +1409,7 @@ namespace ElectricCalculation.ViewModels
         {
             if (Customers.Count == 0)
             {
-                _ui.ShowMessage("Import chi so moi", "Khong co du lieu hien tai de cap nhat.");
+                _ui.ShowMessage("Import chỉ số mới", "Không có dữ liệu hiện tại để cập nhật.");
                 return;
             }
 
@@ -1347,7 +1423,7 @@ namespace ElectricCalculation.ViewModels
             {
                 var wizard = _ui.ShowImportWizardDialog(
                     filePath,
-                    ImportWizardViewModel.ImportWizardMode.CurrentIndexOnly);
+                    ImportWizardViewModel.ImportWizardMode.CurrentIndexOneColumn);
 
                 if (wizard == null)
                 {
@@ -1357,23 +1433,60 @@ namespace ElectricCalculation.ViewModels
                 var importedRows = wizard.ImportedCustomers?.ToList() ?? new List<Customer>();
                 if (importedRows.Count == 0)
                 {
-                    _ui.ShowMessage("Import chi so moi", "Khong co dong hop le de cap nhat.");
+                    _ui.ShowMessage("Import chỉ số mới", "Không có dòng hợp lệ để cập nhật.");
                     return;
                 }
 
                 var map = wizard.BuildConfirmedMap();
-                var result = ApplyCurrentIndexImport(importedRows, map);
-                _ui.ShowMessage("Import chi so moi", BuildCurrentIndexImportSummary(result));
+                var result = ApplyCurrentIndexImport(importedRows, map, preferBestKeyPerRow: wizard.IsCurrentIndexOneColumnMode);
+                var autoSaveMessage = AutoSaveAfterCurrentIndexImport();
+                var message = BuildCurrentIndexImportSummary(result);
+                if (!string.IsNullOrWhiteSpace(autoSaveMessage))
+                {
+                    message += "\n\n" + autoSaveMessage;
+                }
+
+                _ui.ShowMessage("Import chỉ số mới", message);
             }
             catch (WarningException warning)
             {
                 Debug.WriteLine(warning);
-                _ui.ShowMessage("Canh bao import chi so moi", warning.Message);
+                _ui.ShowMessage("Cảnh báo import chỉ số mới", warning.Message);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(ex);
-                _ui.ShowMessage("Loi import chi so moi", ex.Message);
+                _ui.ShowMessage("Lỗi import chỉ số mới", ex.Message);
+            }
+        }
+
+        private string AutoSaveAfterCurrentIndexImport()
+        {
+            try
+            {
+                if (Customers.Count == 0)
+                {
+                    return string.Empty;
+                }
+
+                if (!string.IsNullOrWhiteSpace(LoadedSnapshotPath) && File.Exists(LoadedSnapshotPath))
+                {
+                    ProjectFileService.Save(LoadedSnapshotPath, PeriodLabel, Customers);
+                    SaveGameService.SyncSnapshotFileToSharedStore(LoadedSnapshotPath, PeriodLabel);
+                    IsDirty = false;
+                    return $"Đã tự động lưu (ghi đè) bộ dữ liệu:\n{LoadedSnapshotPath}";
+                }
+
+                var snapshotPath = SaveGameService.SaveSnapshot(PeriodLabel, Customers, snapshotName: "Tháng mới");
+                LoadedSnapshotPath = snapshotPath;
+                IsDirty = false;
+                return $"Đã tự động lưu bộ dữ liệu tháng mới:\n{snapshotPath}";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                IsDirty = true;
+                return $"Đã import nhưng tự động lưu thất bại:\n{ex.Message}";
             }
         }
 

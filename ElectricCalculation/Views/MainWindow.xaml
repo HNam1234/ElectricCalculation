@@ -293,6 +293,17 @@
                                 Padding="12,4"
                                 Command="{Binding AddRowCommand}" />
 
+                        <Button Content="Import chỉ số mới"
+                                Margin="12,0,0,0"
+                                Padding="16,5"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Background="#FFF1F5F9"
+                                Foreground="{StaticResource TextPrimaryBrush}"
+                                BorderBrush="{StaticResource SurfaceBorderBrush}"
+                                Command="{Binding ImportCurrentIndexFromExcelWithDialogCommand}"
+                                ToolTip="Import 1 cột Chỉ số mới từ Excel (ghép theo Tên khách)." />
+
                         <TextBlock Text="Người lập đơn:"
                                    VerticalAlignment="Center"
                                    Margin="24,0,4,0" />

@@ -169,13 +169,13 @@ namespace ElectricCalculation.Services
         public void ShowUserGuideDialog()
         {
             var owner = GetOwner();
-            var steps = UserGuideSnapshotService.BuildGuideSteps(owner);
-            if (steps.Count == 0)
+            var sections = UserGuideSnapshotService.BuildGuideSections(owner);
+            if (sections.Count == 0)
             {
                 throw new WarningException("Không thể tạo ảnh hướng dẫn. Hãy thử mở lại hướng dẫn sau.");
             }
 
-            var vm = new UserGuideViewModel(steps);
+            var vm = new UserGuideViewModel(sections);
             var dialog = new UserGuideWindow
             {
                 Owner = owner,
@@ -219,11 +219,12 @@ namespace ElectricCalculation.Services
             ImportWizardViewModel.ImportWizardMode mode = ImportWizardViewModel.ImportWizardMode.FullDataset)
         {
             var vm = new ImportWizardViewModel(this, filePath, mode);
-            var dialog = new ImportWizardWindow
-            {
-                Owner = GetOwner(),
-                DataContext = vm
-            };
+            Window dialog = mode == ImportWizardViewModel.ImportWizardMode.FullDataset
+                ? new ImportWizardWindow()
+                : new CurrentIndexImportWindow();
+
+            dialog.Owner = GetOwner();
+            dialog.DataContext = vm;
 
             return dialog.ShowDialog() == true ? vm : null;
         }

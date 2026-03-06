@@ -21,7 +21,8 @@ namespace ElectricCalculation.ViewModels
         public enum ImportWizardMode
         {
             FullDataset,
-            CurrentIndexOnly
+            CurrentIndexOnly,
+            CurrentIndexOneColumn
         }
 
         private readonly UiService ui;
@@ -117,13 +118,19 @@ namespace ElectricCalculation.ViewModels
 
         public bool IsCurrentIndexOnlyMode => mode == ImportWizardMode.CurrentIndexOnly;
 
-        public string RequiredPrimaryText => IsCurrentIndexOnlyMode
-            ? "* Bat buoc: Chi so moi"
-            : "* Bat buoc: Ten khach";
+        public bool IsCurrentIndexOneColumnMode => mode == ImportWizardMode.CurrentIndexOneColumn;
 
-        public string RequiredSecondaryText => IsCurrentIndexOnlyMode
-            ? "* Bat buoc: Chon it nhat 1 khoa ghep: So cong to / So thu tu / Ten khach"
-            : "* Bat buoc: Chon it nhat 1 trong: So cong to / Chi so cu / Chi so moi / Don gia";
+        public bool IsCurrentIndexMode => IsCurrentIndexOnlyMode || IsCurrentIndexOneColumnMode;
+
+        public string RequiredPrimaryText => IsCurrentIndexMode
+            ? "* Bắt buộc: Chỉ số mới"
+            : "* Bắt buộc: Tên khách";
+
+        public string RequiredSecondaryText => IsCurrentIndexMode
+            ? IsCurrentIndexOneColumnMode
+                ? "* Khóa ghép: Số công tơ (ưu tiên) / Số thứ tự / Tên khách - hệ thống tự đoán, có thể sửa lại"
+                : "* Bắt buộc: Chọn ít nhất 1 khóa ghép: Số công tơ / Số thứ tự / Tên khách"
+            : "* Bắt buộc: Chọn ít nhất 1 trong: Số công tơ / Chỉ số cũ / Chỉ số mới / Đơn giá";
 
         [ObservableProperty]
         private bool isNameMapped;
@@ -195,13 +202,18 @@ namespace ElectricCalculation.ViewModels
 
         private ExcelImportService.ImportField GetPrimaryRequiredField()
         {
-            return IsCurrentIndexOnlyMode
+            return IsCurrentIndexMode
                 ? ExcelImportService.ImportField.CurrentIndex
                 : ExcelImportService.ImportField.Name;
         }
 
         private IReadOnlyList<ExcelImportService.ImportField> GetSecondaryRequiredFields()
         {
+            if (IsCurrentIndexOneColumnMode)
+            {
+                return Array.Empty<ExcelImportService.ImportField>();
+            }
+
             return IsCurrentIndexOnlyMode
                 ? CurrentIndexOnlySecondaryRequiredFields
                 : FullDatasetSecondaryRequiredFields;
@@ -355,7 +367,7 @@ namespace ElectricCalculation.ViewModels
             var map = BuildConfirmedMap();
             if (map.Count == 0)
             {
-                ErrorMessages = new ObservableCollection<string>(new[] { "❌ Bạn chưa chọn cột nào để nhập." });
+                ErrorMessages = new ObservableCollection<string>(new[] { "Bạn chưa chọn cột nào để nhập." });
                 return;
             }
 
@@ -387,7 +399,7 @@ namespace ElectricCalculation.ViewModels
                 if (!string.IsNullOrWhiteSpace(result.WarningMessage))
                 {
                     var warnings = WarningMessages.ToList();
-                    warnings.Add($"⚠️ {result.WarningMessage}");
+                    warnings.Add($"Cảnh báo: {result.WarningMessage}");
                     WarningMessages = new ObservableCollection<string>(warnings);
                 }
 
@@ -408,7 +420,7 @@ namespace ElectricCalculation.ViewModels
             catch (Exception ex)
             {
                 Debug.WriteLine(ex);
-                ErrorMessages = new ObservableCollection<string>(new[] { $"❌ Lỗi import: {ex.Message}" });
+                ErrorMessages = new ObservableCollection<string>(new[] { $"Lỗi import: {ex.Message}" });
                 ImportStatusText = "Không thể import. Hãy kiểm tra lại file Excel.";
             }
             finally
@@ -522,7 +534,113 @@ namespace ElectricCalculation.ViewModels
                 result[column.SelectedField.Value] = column.ColumnLetter;
             }
 
+            if (IsCurrentIndexOneColumnMode)
+            {
+                var nameColumn = DetectNameColumnLetter();
+                if (!result.ContainsKey(ExcelImportService.ImportField.Name) &&
+                    !string.IsNullOrWhiteSpace(nameColumn))
+                {
+                    result[ExcelImportService.ImportField.Name] = nameColumn;
+                }
+
+                var meterColumn = DetectMeterNumberColumnLetter();
+                if (!result.ContainsKey(ExcelImportService.ImportField.MeterNumber) &&
+                    !string.IsNullOrWhiteSpace(meterColumn))
+                {
+                    result[ExcelImportService.ImportField.MeterNumber] = meterColumn;
+                }
+
+                var sequenceColumn = DetectSequenceNumberColumnLetter();
+                if (!result.ContainsKey(ExcelImportService.ImportField.SequenceNumber) &&
+                    !string.IsNullOrWhiteSpace(sequenceColumn))
+                {
+                    result[ExcelImportService.ImportField.SequenceNumber] = sequenceColumn;
+                }
+            }
+
             return result;
+        }
+
+        private bool IsSelectableField(ExcelImportService.ImportField field)
+        {
+            if (IsCurrentIndexOneColumnMode)
+            {
+                return field == ExcelImportService.ImportField.CurrentIndex ||
+                       field == ExcelImportService.ImportField.MeterNumber ||
+                       field == ExcelImportService.ImportField.SequenceNumber ||
+                       field == ExcelImportService.ImportField.Name;
+            }
+
+            return true;
+        }
+
+        private string? DetectNameColumnLetter()
+        {
+            var candidate = ColumnMappings
+                .Where(c =>
+                    c.SuggestedField == ExcelImportService.ImportField.Name &&
+                    c.SuggestedScore >= ColumnMappingViewModel.AutoSelectThreshold)
+                .OrderByDescending(c => c.SuggestedScore)
+                .ThenBy(c => GetColumnIndex(c.ColumnLetter))
+                .FirstOrDefault();
+
+            if (candidate != null && !string.IsNullOrWhiteSpace(candidate.ColumnLetter))
+            {
+                return candidate.ColumnLetter.Trim().ToUpperInvariant();
+            }
+
+            if (preview.HeaderRowIndex == null && columnMappingsByLetter.ContainsKey("B"))
+            {
+                return "B";
+            }
+
+            return null;
+        }
+
+        private string? DetectMeterNumberColumnLetter()
+        {
+            var candidate = ColumnMappings
+                .Where(c =>
+                    c.SuggestedField == ExcelImportService.ImportField.MeterNumber &&
+                    c.SuggestedScore >= ColumnMappingViewModel.AutoSelectThreshold)
+                .OrderByDescending(c => c.SuggestedScore)
+                .ThenBy(c => GetColumnIndex(c.ColumnLetter))
+                .FirstOrDefault();
+
+            if (candidate != null && !string.IsNullOrWhiteSpace(candidate.ColumnLetter))
+            {
+                return candidate.ColumnLetter.Trim().ToUpperInvariant();
+            }
+
+            if (preview.HeaderRowIndex == null && columnMappingsByLetter.ContainsKey("J"))
+            {
+                return "J";
+            }
+
+            return null;
+        }
+
+        private string? DetectSequenceNumberColumnLetter()
+        {
+            var candidate = ColumnMappings
+                .Where(c =>
+                    c.SuggestedField == ExcelImportService.ImportField.SequenceNumber &&
+                    c.SuggestedScore >= ColumnMappingViewModel.AutoSelectThreshold)
+                .OrderByDescending(c => c.SuggestedScore)
+                .ThenBy(c => GetColumnIndex(c.ColumnLetter))
+                .FirstOrDefault();
+
+            if (candidate != null && !string.IsNullOrWhiteSpace(candidate.ColumnLetter))
+            {
+                return candidate.ColumnLetter.Trim().ToUpperInvariant();
+            }
+
+            if (preview.HeaderRowIndex == null && columnMappingsByLetter.ContainsKey("A"))
+            {
+                return "A";
+            }
+
+            return null;
         }
 
         private void LoadPreview(ImportPreviewResult next)
@@ -595,6 +713,11 @@ namespace ElectricCalculation.ViewModels
 
             foreach (var field in ordered)
             {
+                if (!IsSelectableField(field))
+                {
+                    continue;
+                }
+
                 var label = GetFieldLabel(field);
                 if (field == primaryRequiredField)
                 {
@@ -663,8 +786,10 @@ namespace ElectricCalculation.ViewModels
             var allFields = Enum.GetValues<ExcelImportService.ImportField>();
             var ordered = importantFields.Concat(allFields.Where(f => !importantFields.Contains(f))).ToList();
 
-            FieldExplanationRows = new ObservableCollection<FieldExplanationRowViewModel>(ordered.Select(field =>
-                new FieldExplanationRowViewModel(field, GetFieldLabel(field), GetFieldDescription(field))));
+            FieldExplanationRows = new ObservableCollection<FieldExplanationRowViewModel>(
+                ordered
+                    .Where(IsSelectableField)
+                    .Select(field => new FieldExplanationRowViewModel(field, GetFieldLabel(field), GetFieldDescription(field))));
 
             foreach (var row in FieldExplanationRows)
             {
@@ -794,6 +919,11 @@ namespace ElectricCalculation.ViewModels
 
             foreach (var pair in template)
             {
+                if (!IsSelectableField(pair.Key))
+                {
+                    continue;
+                }
+
                 if (usedFields.Contains(pair.Key))
                 {
                     continue;
@@ -895,7 +1025,10 @@ namespace ElectricCalculation.ViewModels
             }
 
             var candidates = ColumnMappings
-                .Where(c => c.SuggestedField != null && c.SuggestedScore >= ColumnMappingViewModel.AutoSelectThreshold)
+                .Where(c =>
+                    c.SuggestedField != null &&
+                    IsSelectableField(c.SuggestedField.Value) &&
+                    c.SuggestedScore >= ColumnMappingViewModel.AutoSelectThreshold)
                 .OrderByDescending(c => c.SuggestedScore)
                 .ThenBy(c => GetColumnIndex(c.ColumnLetter))
                 .ToList();
@@ -933,6 +1066,11 @@ namespace ElectricCalculation.ViewModels
 
             foreach (var pair in profile.ConfirmedMap ?? new Dictionary<ExcelImportService.ImportField, string>())
             {
+                if (!IsSelectableField(pair.Key))
+                {
+                    continue;
+                }
+
                 var col = (pair.Value ?? string.Empty).Trim().ToUpperInvariant();
                 if (string.IsNullOrWhiteSpace(col))
                 {
@@ -992,7 +1130,11 @@ namespace ElectricCalculation.ViewModels
             var secondaryRequiredFields = GetSecondaryRequiredFields();
 
             IsNameMapped = selectedFields.Contains(primaryRequiredField);
-            IsAnyKeyFieldMapped = selectedFields.Any(f => secondaryRequiredFields.Contains(f));
+            IsAnyKeyFieldMapped = IsCurrentIndexOneColumnMode
+                ? !string.IsNullOrWhiteSpace(DetectMeterNumberColumnLetter()) ||
+                  !string.IsNullOrWhiteSpace(DetectSequenceNumberColumnLetter()) ||
+                  !string.IsNullOrWhiteSpace(DetectNameColumnLetter())
+                : selectedFields.Any(f => secondaryRequiredFields.Contains(f));
 
             if (!IsNameMapped)
             {
@@ -1042,6 +1184,42 @@ namespace ElectricCalculation.ViewModels
                 return true;
             }
 
+            if (IsCurrentIndexOneColumnMode)
+            {
+                var hasAnyKey =
+                    map.ContainsKey(ExcelImportService.ImportField.MeterNumber) ||
+                    map.ContainsKey(ExcelImportService.ImportField.SequenceNumber) ||
+                    map.ContainsKey(ExcelImportService.ImportField.Name);
+
+                if (!hasAnyKey)
+                {
+                    return true;
+                }
+
+                if (map.TryGetValue(ExcelImportService.ImportField.CurrentIndex, out var currentIndexColumn) &&
+                    map.TryGetValue(ExcelImportService.ImportField.MeterNumber, out var meterColumn) &&
+                    string.Equals(currentIndexColumn, meterColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (map.TryGetValue(ExcelImportService.ImportField.CurrentIndex, out currentIndexColumn) &&
+                    map.TryGetValue(ExcelImportService.ImportField.SequenceNumber, out var sequenceColumn) &&
+                    string.Equals(currentIndexColumn, sequenceColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (map.TryGetValue(ExcelImportService.ImportField.CurrentIndex, out currentIndexColumn) &&
+                    map.TryGetValue(ExcelImportService.ImportField.Name, out var nameColumn) &&
+                    string.Equals(currentIndexColumn, nameColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
             var secondaryRequiredFields = GetSecondaryRequiredFields();
             var hasAnyKeyField = secondaryRequiredFields.Any(map.ContainsKey);
 
@@ -1056,16 +1234,52 @@ namespace ElectricCalculation.ViewModels
 
             if (!map.ContainsKey(primaryRequiredField))
             {
-                errors.Add($"❌ Thieu cot bat buoc: {GetFieldLabel(primaryRequiredField)}");
+                errors.Add($"Thiếu cột bắt buộc: {GetFieldLabel(primaryRequiredField)}");
             }
 
-            var hasAnyKeyField = secondaryRequiredFields.Any(map.ContainsKey);
-
-            if (!hasAnyKeyField)
+            if (IsCurrentIndexOneColumnMode)
             {
-                errors.Add(IsCurrentIndexOnlyMode
-                    ? "❌ Can chon it nhat 1 khoa ghep: So cong to / So thu tu / Ten khach"
-                    : "❌ Can chon it nhat 1 trong: So cong to / Chi so cu / Chi so moi / Don gia");
+                var hasAnyKey =
+                    map.ContainsKey(ExcelImportService.ImportField.MeterNumber) ||
+                    map.ContainsKey(ExcelImportService.ImportField.SequenceNumber) ||
+                    map.ContainsKey(ExcelImportService.ImportField.Name);
+
+                if (!hasAnyKey)
+                {
+                    errors.Add("Không tìm thấy cột khóa ghép (Số công tơ / Số thứ tự / Tên khách). Hãy chọn đúng sheet và dòng tiêu đề.");
+                }
+
+                if (map.TryGetValue(ExcelImportService.ImportField.CurrentIndex, out var currentIndexColumn) &&
+                    map.TryGetValue(ExcelImportService.ImportField.MeterNumber, out var meterColumn) &&
+                    string.Equals(currentIndexColumn, meterColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("Cột Số công tơ bị trùng với cột Chỉ số mới. Hãy chọn đúng cột Chỉ số mới.");
+                }
+
+                if (map.TryGetValue(ExcelImportService.ImportField.CurrentIndex, out currentIndexColumn) &&
+                    map.TryGetValue(ExcelImportService.ImportField.SequenceNumber, out var sequenceColumn) &&
+                    string.Equals(currentIndexColumn, sequenceColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("Cột Số thứ tự (STT) bị trùng với cột Chỉ số mới. Hãy chọn đúng cột Chỉ số mới.");
+                }
+
+                if (map.TryGetValue(ExcelImportService.ImportField.CurrentIndex, out currentIndexColumn) &&
+                    map.TryGetValue(ExcelImportService.ImportField.Name, out var nameColumn) &&
+                    string.Equals(currentIndexColumn, nameColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("Cột Tên khách bị trùng với cột Chỉ số mới. Hãy chọn đúng cột Chỉ số mới.");
+                }
+            }
+            else
+            {
+                var hasAnyKeyField = secondaryRequiredFields.Any(map.ContainsKey);
+
+                if (!hasAnyKeyField)
+                {
+                    errors.Add(IsCurrentIndexOnlyMode
+                        ? "Cần chọn ít nhất 1 khóa ghép: Số công tơ / Số thứ tự / Tên khách"
+                        : "Cần chọn ít nhất 1 trong: Số công tơ / Chỉ số cũ / Chỉ số mới / Đơn giá");
+                }
             }
 
             var conflictGroups = ColumnMappings
@@ -1078,7 +1292,7 @@ namespace ElectricCalculation.ViewModels
             {
                 var fieldLabel = GetFieldLabel(group.Key);
                 var columns = group.Select(GetColumnDisplay).ToList();
-                errors.Add($"❌ Trùng mapping: {fieldLabel} đang được chọn ở {string.Join(", ", columns)}");
+                errors.Add($"Trùng mapping: {fieldLabel} đang được chọn ở {string.Join(", ", columns)}");
             }
 
             return errors;
@@ -1088,14 +1302,14 @@ namespace ElectricCalculation.ViewModels
         {
             var warnings = new List<string>();
 
-            if (!IsCurrentIndexOnlyMode && !map.ContainsKey(ExcelImportService.ImportField.UnitPrice))
+            if (!IsCurrentIndexMode && !map.ContainsKey(ExcelImportService.ImportField.UnitPrice))
             {
-                warnings.Add("⚠️ Thiếu cột: Đơn giá (nếu Excel có)");
+                warnings.Add("Thiếu cột: Đơn giá (nếu Excel có)");
             }
 
-            if (!IsCurrentIndexOnlyMode && !map.ContainsKey(ExcelImportService.ImportField.Multiplier))
+            if (!IsCurrentIndexMode && !map.ContainsKey(ExcelImportService.ImportField.Multiplier))
             {
-                warnings.Add("⚠️ Thiếu cột: Hệ số (nếu Excel có)");
+                warnings.Add("Thiếu cột: Hệ số (nếu Excel có)");
             }
 
             warnings.AddRange(BuildSampleDataWarnings(map));
@@ -1172,17 +1386,17 @@ namespace ElectricCalculation.ViewModels
 
             if (unitPriceFails > 0)
             {
-                yield return $"⚠️ Đơn giá: {unitPriceFails} dòng mẫu không đọc được số";
+                yield return $"Đơn giá: {unitPriceFails} dòng mẫu không đọc được số";
             }
 
             if (multiplierBad > 0)
             {
-                yield return $"⚠️ Hệ số: {multiplierBad} dòng mẫu <= 0 (khi import sẽ tự đặt về 1)";
+                yield return $"Hệ số: {multiplierBad} dòng mẫu <= 0 (khi import sẽ tự đặt về 1)";
             }
 
             if (indexBackwards > 0)
             {
-                yield return $"⚠️ Chỉ số: {indexBackwards} dòng mẫu (chỉ số mới < chỉ số cũ)";
+                yield return $"Chỉ số: {indexBackwards} dòng mẫu (chỉ số mới < chỉ số cũ)";
             }
         }
 

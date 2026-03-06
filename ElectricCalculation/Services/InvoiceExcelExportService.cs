@@ -690,6 +690,9 @@ namespace ElectricCalculation.Services
             RemoveAmountColumnMergedRange(worksheetRoot, mainNs);
             RemoveMergeRange(worksheetRoot, mainNs, "J10:K12");
             RemoveMergeRange(worksheetRoot, mainNs, "J13:K14");
+            RemoveMergeRange(worksheetRoot, mainNs, "K10:L12");
+            RemoveMergeRange(worksheetRoot, mainNs, "K13:L14");
+            RemoveMergeRange(worksheetRoot, mainNs, $"J{detailHeaderRow}:J{detailHeaderRow + 2}");
 
             if (extraRows > 0)
             {
@@ -698,6 +701,7 @@ namespace ElectricCalculation.Services
             }
 
             EnsureDetailRows(sheetDataElement, mainNs, detailTemplateRow, customers.Count, detailStartRow);
+            var displayNames = BuildMultiHouseholdDisplayNames(customers);
 
             // Multi-household layout:
             // A: STT, B: Tên khách, C..I: chỉ số và tiền.
@@ -719,8 +723,7 @@ namespace ElectricCalculation.Services
                 var multiplier = customer.Multiplier <= 0 ? 1 : customer.Multiplier;
                 var consumption = customer.Consumption;
                 var amount = customer.Amount;
-                var name = string.IsNullOrWhiteSpace(customer.Name) ? $"Hộ {sequence}" : customer.Name.Trim();
-                var displayName = name;
+                var displayName = displayNames[i];
 
                 UpdateNumberCell(sheetDataElement, mainNs, $"A{rowIndex}", sequence);
                 UpdateTextCell(sheetDataElement, mainNs, $"B{rowIndex}", displayName);
@@ -747,35 +750,47 @@ namespace ElectricCalculation.Services
                 mainNs,
                 $"A{amountInWordsRow}:H{amountInWordsRow}",
                 $"A{amountInWordsRow}:I{amountInWordsRow}");
-            EnsureMergeRange(worksheetRoot, mainNs, $"J{substationRow}:K{substationRow}");
-            EnsureMergeRange(worksheetRoot, mainNs, $"J{bookCodeRow}:K{bookCodeRow}");
-            EnsureMergeRange(worksheetRoot, mainNs, $"J{pageRow}:K{pageRow}");
 
             var groupName = GetSharedNonEmptyValue(customers, c => c.GroupName) ?? "Nhiều hộ";
             var sharedAddress = GetSharedNonEmptyValue(customers, c => c.Address) ?? string.Empty;
+            var sharedRepresentative = GetSharedNonEmptyValue(customers, c => c.RepresentativeName) ?? string.Empty;
+            var sharedHouseholdPhone = GetSharedNonEmptyValue(customers, c => c.HouseholdPhone) ?? string.Empty;
+            var sharedRepresentativePhone = GetSharedNonEmptyValue(customers, c => c.Phone) ?? string.Empty;
             var sharedSubstation = GetSharedNonEmptyValue(customers, c => c.Substation) ?? string.Empty;
+            var sharedBookCode = GetSharedNonEmptyValue(customers, c => c.BuildingName) ?? string.Empty;
+            var sharedPage = GetSharedNonEmptyValue(customers, c => c.Page) ?? string.Empty;
             var issuer = issuerName?.Trim() ?? string.Empty;
+            var representativeDisplay = !string.IsNullOrWhiteSpace(sharedRepresentative) ? sharedRepresentative : groupName;
 
-            // Move right-side notes to column J because column I is now amount.
             UpdateTextCell(sheetDataElement, mainNs, "I4", string.Empty);
             UpdateNumberCell(sheetDataElement, mainNs, "I6", null);
-            UpdateTextCell(sheetDataElement, mainNs, "I7", string.Empty);
-            UpdateTextCell(sheetDataElement, mainNs, "I8", string.Empty);
-            UpdateTextCell(sheetDataElement, mainNs, $"I{substationRow}", string.Empty);
-            UpdateTextCell(sheetDataElement, mainNs, $"I{bookCodeRow}", string.Empty);
-            UpdateTextCell(sheetDataElement, mainNs, $"I{pageRow}", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, "J4", string.Empty);
+            UpdateNumberCell(sheetDataElement, mainNs, "J6", null);
+            UpdateTextCell(sheetDataElement, mainNs, "J7", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, "J8", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, $"J{substationRow}", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, $"J{bookCodeRow}", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, $"J{pageRow}", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, "K4", string.Empty);
+            UpdateNumberCell(sheetDataElement, mainNs, "K6", null);
+            UpdateTextCell(sheetDataElement, mainNs, "K7", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, "K8", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, "K10", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, $"K{substationRow}", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, $"K{bookCodeRow}", string.Empty);
+            UpdateTextCell(sheetDataElement, mainNs, $"K{pageRow}", string.Empty);
 
-            CopyCellStyle(sheetDataElement, mainNs, "I4", "J4");
-            CopyCellStyle(sheetDataElement, mainNs, "I6", "J6");
-            CopyCellStyle(sheetDataElement, mainNs, "I7", "J7");
-            CopyCellStyle(sheetDataElement, mainNs, "I8", "J8");
-            CopyCellStyle(sheetDataElement, mainNs, "I10", "J10");
-            CopyCellStyle(sheetDataElement, mainNs, $"I{substationRow}", $"J{substationRow}");
-            CopyCellStyle(sheetDataElement, mainNs, $"I{bookCodeRow}", $"J{bookCodeRow}");
-            CopyCellStyle(sheetDataElement, mainNs, $"I{pageRow}", $"J{pageRow}");
+            if (!string.IsNullOrWhiteSpace(sharedHouseholdPhone) &&
+                string.Equals(sharedRepresentativePhone, sharedHouseholdPhone, StringComparison.OrdinalIgnoreCase))
+            {
+                sharedRepresentativePhone = string.Empty;
+            }
 
-            UpdateTextCell(sheetDataElement, mainNs, "J4", $"Số phiếu: 1 phiếu ({customers.Count} hộ)");
-            UpdateNumberCell(sheetDataElement, mainNs, "J6", customers.Count);
+            if (string.IsNullOrWhiteSpace(sharedHouseholdPhone) && !string.IsNullOrWhiteSpace(sharedRepresentativePhone))
+            {
+                sharedHouseholdPhone = sharedRepresentativePhone;
+                sharedRepresentativePhone = string.Empty;
+            }
 
             var periodText = FormatPeriodLabel(periodLabel);
             if (!string.IsNullOrWhiteSpace(periodText))
@@ -789,19 +804,38 @@ namespace ElectricCalculation.Services
                 mainNs,
                 "A7",
                 string.IsNullOrWhiteSpace(sharedAddress)
-                    ? "Địa chỉ hộ tiêu thụ: Nhiều hộ."
+                    ? string.Empty
                     : $"Địa chỉ hộ tiêu thụ: {sharedAddress}.");
-            UpdateTextCell(sheetDataElement, mainNs, "A8", $"Đại diện: {groupName}.");
-            UpdateTextCell(sheetDataElement, mainNs, "J7", string.Empty);
-            UpdateTextCell(sheetDataElement, mainNs, "J8", string.Empty);
-            UpdateTextCell(sheetDataElement, mainNs, "J10", $"Số công tơ: {customers.Count} hộ.");
             UpdateTextCell(
                 sheetDataElement,
                 mainNs,
-                $"J{substationRow}",
+                "I7",
+                string.IsNullOrWhiteSpace(sharedHouseholdPhone) ? string.Empty : $"Điện thoại: {sharedHouseholdPhone}.");
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "A8",
+                string.IsNullOrWhiteSpace(representativeDisplay) ? string.Empty : $"Đại diện: {representativeDisplay}.");
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "I8",
+                string.IsNullOrWhiteSpace(sharedRepresentativePhone) ? string.Empty : $"Điện thoại: {sharedRepresentativePhone}.");
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                $"I{substationRow}",
                 string.IsNullOrWhiteSpace(sharedSubstation) ? string.Empty : $"TBA: {sharedSubstation}.");
-            UpdateTextCell(sheetDataElement, mainNs, $"J{bookCodeRow}", string.Empty);
-            UpdateTextCell(sheetDataElement, mainNs, $"J{pageRow}", $"Số hộ: {customers.Count}.");
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                $"I{bookCodeRow}",
+                string.IsNullOrWhiteSpace(sharedBookCode) ? string.Empty : $"Mã sổ: {sharedBookCode}.");
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                $"I{pageRow}",
+                string.IsNullOrWhiteSpace(sharedPage) ? string.Empty : $"Trang: {sharedPage}.");
 
             var totalAmount = customers.Sum(c => c.Amount);
             CopyCellStyle(sheetDataElement, mainNs, $"H{totalRow}", $"I{totalRow}");
@@ -821,6 +855,9 @@ namespace ElectricCalculation.Services
                 mainNs,
                 $"H{dateRow}",
                 $"Hà Nội, ngày {DateTime.Now.Day} tháng {DateTime.Now.Month} năm {DateTime.Now.Year}");
+            ReplaceMergeRange(worksheetRoot, mainNs, $"H{dateRow}:I{dateRow}", $"H{dateRow}:J{dateRow}");
+            ReplaceMergeRange(worksheetRoot, mainNs, $"H{dateRow + 1}:I{dateRow + 1}", $"H{dateRow + 1}:J{dateRow + 1}");
+            ReplaceMergeRange(worksheetRoot, mainNs, $"H{issuerRow}:I{issuerRow}", $"H{issuerRow}:J{issuerRow}");
 
             UpdateTextCell(sheetDataElement, mainNs, $"H{issuerRow}", issuer);
         }
@@ -852,6 +889,148 @@ namespace ElectricCalculation.Services
             }
 
             return shared;
+        }
+
+        private static IReadOnlyList<string> BuildMultiHouseholdDisplayNames(IReadOnlyList<Customer> customers)
+        {
+            if (customers.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var baseNames = customers
+                .Select((customer, index) => GetMultiHouseholdBaseName(customer, index + 1))
+                .ToArray();
+            var displayNames = (string[])baseNames.Clone();
+
+            var duplicateGroups = Enumerable.Range(0, customers.Count)
+                .GroupBy(index => NormalizeKey(baseNames[index]), StringComparer.OrdinalIgnoreCase)
+                .Where(group => !string.IsNullOrWhiteSpace(group.Key) && group.Count() > 1);
+
+            foreach (var group in duplicateGroups)
+            {
+                var indexes = group.ToList();
+                var detailPartsByIndex = indexes.ToDictionary(
+                    index => index,
+                    index => GetMultiHouseholdDetailParts(customers[index], baseNames[index]));
+                var suffixDepthByIndex = indexes.ToDictionary(index => index, _ => 0);
+
+                while (true)
+                {
+                    var collisions = indexes
+                        .GroupBy(index => NormalizeKey(displayNames[index]), StringComparer.OrdinalIgnoreCase)
+                        .Where(collision => collision.Count() > 1)
+                        .Select(collision => collision.ToList())
+                        .ToList();
+
+                    if (collisions.Count == 0)
+                    {
+                        break;
+                    }
+
+                    var progressed = false;
+                    foreach (var collision in collisions)
+                    {
+                        foreach (var index in collision)
+                        {
+                            if (suffixDepthByIndex[index] >= detailPartsByIndex[index].Count)
+                            {
+                                continue;
+                            }
+
+                            suffixDepthByIndex[index]++;
+                            progressed = true;
+                        }
+                    }
+
+                    foreach (var index in indexes)
+                    {
+                        displayNames[index] = ComposeMultiHouseholdDisplayName(
+                            baseNames[index],
+                            detailPartsByIndex[index],
+                            suffixDepthByIndex[index]);
+                    }
+
+                    if (progressed)
+                    {
+                        continue;
+                    }
+
+                    foreach (var collision in collisions)
+                    {
+                        foreach (var index in collision)
+                        {
+                            displayNames[index] = $"{displayNames[index]} - Dòng {index + 1}";
+                        }
+                    }
+
+                    break;
+                }
+            }
+
+            return displayNames;
+        }
+
+        private static string GetMultiHouseholdBaseName(Customer customer, int sequence)
+        {
+            return string.IsNullOrWhiteSpace(customer.Name)
+                ? $"Hộ {sequence}"
+                : customer.Name.Trim();
+        }
+
+        private static List<string> GetMultiHouseholdDetailParts(Customer customer, string baseName)
+        {
+            var parts = new List<string>();
+            AddMultiHouseholdDetailPart(parts, customer.Location, baseName);
+            AddMultiHouseholdDetailPart(parts, customer.Page, baseName, "Trang ");
+            AddMultiHouseholdDetailPart(parts, customer.MeterNumber, baseName, "Công tơ ");
+            AddMultiHouseholdDetailPart(parts, customer.BuildingName, baseName, "Mã sổ ");
+            AddMultiHouseholdDetailPart(parts, customer.Address, baseName);
+            return parts;
+        }
+
+        private static string ComposeMultiHouseholdDisplayName(
+            string baseName,
+            IReadOnlyList<string> detailParts,
+            int suffixDepth)
+        {
+            if (suffixDepth <= 0 || detailParts.Count == 0)
+            {
+                return baseName;
+            }
+
+            return $"{baseName} - {string.Join(" - ", detailParts.Take(suffixDepth))}";
+        }
+
+        private static void AddMultiHouseholdDetailPart(
+            ICollection<string> parts,
+            string? value,
+            string baseName,
+            string prefix = "")
+        {
+            var text = value?.Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return;
+            }
+
+            var candidate = string.IsNullOrWhiteSpace(prefix) ? text : $"{prefix}{text}";
+            if (string.Equals(candidate, baseName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (parts.Any(part => string.Equals(part, candidate, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            parts.Add(candidate);
+        }
+
+        private static string NormalizeKey(string? value)
+        {
+            return value?.Trim() ?? string.Empty;
         }
 
         private static XElement? GetRow(XElement sheetDataElement, XNamespace mainNs, int rowIndex)
@@ -997,7 +1176,7 @@ namespace ElectricCalculation.Services
             cols.Add(new XElement(mainNs + "col",
                 new XAttribute("min", 2),
                 new XAttribute("max", 2),
-                new XAttribute("width", "50"),
+                new XAttribute("width", "48"),
                 new XAttribute("customWidth", 1)));
 
             cols.Add(new XElement(mainNs + "col",
@@ -1033,23 +1212,17 @@ namespace ElectricCalculation.Services
             cols.Add(new XElement(mainNs + "col",
                 new XAttribute("min", 8),
                 new XAttribute("max", 8),
-                new XAttribute("width", "8.28515625"),
+                new XAttribute("width", "10.42578125"),
                 new XAttribute("customWidth", 1)));
 
             cols.Add(new XElement(mainNs + "col",
                 new XAttribute("min", 9),
                 new XAttribute("max", 9),
-                new XAttribute("width", "18"),
+                new XAttribute("width", "20.7109375"),
                 new XAttribute("customWidth", 1)));
 
             cols.Add(new XElement(mainNs + "col",
                 new XAttribute("min", 10),
-                new XAttribute("max", 10),
-                new XAttribute("width", "24.7109375"),
-                new XAttribute("customWidth", 1)));
-
-            cols.Add(new XElement(mainNs + "col",
-                new XAttribute("min", 11),
                 new XAttribute("max", 16384),
                 new XAttribute("width", "7.140625"),
                 new XAttribute("customWidth", 1)));

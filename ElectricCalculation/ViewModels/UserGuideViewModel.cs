@@ -12,22 +12,32 @@ namespace ElectricCalculation.ViewModels
         string Description,
         BitmapSource Screenshot);
 
+    public sealed record UserGuideSectionItem(
+        string TabTitle,
+        string Heading,
+        string Description,
+        IReadOnlyList<UserGuideStepItem> Steps);
+
     public partial class UserGuideViewModel : ObservableObject
     {
         [ObservableProperty]
         private bool? dialogResult;
 
-        public ObservableCollection<UserGuideStepItem> Steps { get; } = new();
+        [ObservableProperty]
+        private UserGuideSectionItem? selectedSection;
+
+        public ObservableCollection<UserGuideSectionItem> Sections { get; } = new();
 
         public string GeneratedAtText { get; }
 
-        public UserGuideViewModel(IEnumerable<UserGuideStepItem> steps)
+        public UserGuideViewModel(IEnumerable<UserGuideSectionItem> sections)
         {
-            foreach (var step in steps)
+            foreach (var section in sections)
             {
-                Steps.Add(step);
+                Sections.Add(section);
             }
 
+            SelectedSection = Sections.Count > 0 ? Sections[0] : null;
             GeneratedAtText = $"Hướng dẫn được tạo lúc: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
         }
 
