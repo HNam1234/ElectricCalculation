@@ -7,6 +7,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
+using ElectricCalculation.Helpers;
 using ElectricCalculation.Models;
 
 namespace ElectricCalculation.Services
@@ -421,7 +422,7 @@ namespace ElectricCalculation.Services
                 {
                     SequenceNumber = sequenceNumber,
                     Name = householdName,
-                    GroupName = (GetMappedString(cells, headerMap, ImportField.GroupName, fallbackColumn: Fallback("C")) ?? string.Empty).Trim(),
+                    GroupName = TextNormalization.NormalizeForDisplay(GetMappedString(cells, headerMap, ImportField.GroupName, fallbackColumn: Fallback("C"))),
                     Address = (GetMappedString(cells, headerMap, ImportField.Address, fallbackColumn: Fallback("D")) ?? string.Empty).Trim(),
                     RepresentativeName = representativeName,
                     HouseholdPhone = householdPhone,
@@ -1221,7 +1222,7 @@ namespace ElectricCalculation.Services
                 {
                     SequenceNumber = sequenceNumber,
                     Name = householdName,
-                    GroupName = (GetMappedString(cells, headerMap, ImportField.GroupName, fallbackColumn: "C") ?? string.Empty).Trim(),
+                    GroupName = TextNormalization.NormalizeForDisplay(GetMappedString(cells, headerMap, ImportField.GroupName, fallbackColumn: "C")),
                     Address = (GetMappedString(cells, headerMap, ImportField.Address, fallbackColumn: "D") ?? string.Empty).Trim(),
                     RepresentativeName = representativeName,
                     HouseholdPhone = householdPhone,
