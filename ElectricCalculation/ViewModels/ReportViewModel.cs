@@ -224,17 +224,18 @@ namespace ElectricCalculation.ViewModels
                     return;
                 }
 
-                var templatePath = _ui.GetInvoiceTemplatePath();
-                InvoiceExcelExportService.ExportHouseholdsAsSingleInvoice(
+                var templatePath = _ui.GetLegacySummaryTemplatePath();
+                var sheetCount = LegacyGroupInvoiceExportService.ExportGroupInvoice(
                     templatePath,
                     outputPath,
+                    groupName,
                     customers,
                     _periodLabel,
                     _issuerName);
 
                 _ui.ShowMessage(
                     "In hóa đơn nhóm",
-                    $"Đã tạo 1 hóa đơn gộp {customers.Count} hộ cho nhóm '{groupName}' tại:\n{outputPath}");
+                    $"Đã tạo {sheetCount} sheet hóa đơn nhóm ({customers.Count} khách) cho '{groupName}' tại:\n{outputPath}");
             }
             catch (WarningException warning)
             {
@@ -276,7 +277,7 @@ namespace ElectricCalculation.ViewModels
             try
             {
                 Directory.CreateDirectory(folderPath);
-                var templatePath = _ui.GetInvoiceTemplatePath();
+                var templatePath = _ui.GetLegacySummaryTemplatePath();
                 var usedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 var successCount = 0;
@@ -302,9 +303,10 @@ namespace ElectricCalculation.ViewModels
                             $"Hoa don - {safeGroupName}.xlsx",
                             usedPaths);
 
-                        InvoiceExcelExportService.ExportHouseholdsAsSingleInvoice(
+                        LegacyGroupInvoiceExportService.ExportGroupInvoice(
                             templatePath,
                             outputPath,
+                            groupName,
                             customers,
                             _periodLabel,
                             _issuerName);

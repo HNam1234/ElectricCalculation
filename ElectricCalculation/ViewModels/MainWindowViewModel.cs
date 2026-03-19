@@ -9,6 +9,10 @@ using System.IO;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -77,8 +81,12 @@ namespace ElectricCalculation.ViewModels
         [NotifyPropertyChangedFor(nameof(IsDetailMode))]
         private bool isFastEntryMode = true;
 
+        private const string AllGroupsOption = "(Tất cả)";
+
+        public ObservableCollection<string> GroupOptions { get; } = new();
+
         [ObservableProperty]
-        private bool isRouteEntryMode = false;
+        private string selectedGroup = AllGroupsOption;
 
         [ObservableProperty]
         private bool filterMissing;
@@ -90,8 +98,6 @@ namespace ElectricCalculation.ViewModels
         private bool filterError;
 
         public bool IsDetailMode => !IsFastEntryMode;
-
-        public string RouteEntryProgressText => BuildRouteEntryProgressText();
 
         public ObservableRangeCollection<Customer> Customers { get; } = new();
 
@@ -168,14 +174,13 @@ namespace ElectricCalculation.ViewModels
                 RecalculateViewSnapshotAndSummary();
             };
 
-            ApplyRouteEntrySort();
-
             if (SearchFields.Count > 0)
             {
                 SelectedSearchField = SearchFields[0];
             }
 
             ApplySearchCache(SearchText, SelectedSearchField);
+            UpdateGroupOptions();
             RecalculateViewSnapshotAndSummary();
 
             PeriodLabel = $"Tháng {DateTime.Now.Month:00}/{DateTime.Now.Year}";
@@ -187,7 +192,6 @@ namespace ElectricCalculation.ViewModels
         {
             CustomersView.Refresh();
             NotifySummaryChanged();
-            NotifyRouteEntryProgressChanged();
         }
 
         private void ApplySearchCache(string? keyword, string? searchField)
@@ -318,6 +322,7 @@ namespace ElectricCalculation.ViewModels
             }
 
             NotifySummaryChanged();
+            UpdateGroupOptions();
         }
 
         [RelayCommand]
@@ -557,69 +562,10 @@ namespace ElectricCalculation.ViewModels
             OnPropertyChanged(nameof(TotalChargeableKwh));
             OnPropertyChanged(nameof(TotalAmount));
 
-            if (IsRouteEntryMode)
-            {
-                NotifyRouteEntryProgressChanged();
-            }
         }
 
-        private void NotifyRouteEntryProgressChanged()
-        {
-            OnPropertyChanged(nameof(RouteEntryProgressText));
-        }
 
-        private string BuildRouteEntryProgressText()
-        {
-            if (!IsRouteEntryMode)
-            {
-                return string.Empty;
-            }
 
-            var current = SelectedCustomer;
-            if (current == null)
-            {
-                return string.Empty;
-            }
-
-            var locationRaw = current.Location ?? string.Empty;
-            var locationDisplay = string.IsNullOrWhiteSpace(locationRaw) ? "(Chưa có vị trí)" : locationRaw.Trim();
-
-            var customers = TryGetViewCustomersSnapshot();
-            if (customers.Count == 0)
-            {
-                return $"Đang nhập: {locationDisplay}";
-            }
-
-            var locationKey = locationRaw.Trim();
-            var group = customers
-                .Where(c => string.Equals((c.Location ?? string.Empty).Trim(), locationKey, StringComparison.CurrentCultureIgnoreCase))
-                .ToList();
-
-            if (group.Count == 0)
-            {
-                return $"Đang nhập: {locationDisplay}";
-            }
-
-            var index = group.FindIndex(c => ReferenceEquals(c, current));
-            if (index < 0)
-            {
-                index = 0;
-            }
-
-            return $"Đang nhập: {locationDisplay} ({index + 1}/{group.Count})";
-        }
-
-        private void ApplyRouteEntrySort()
-        {
-            if (CustomersView is not ListCollectionView view)
-            {
-                return;
-            }
-
-            view.CustomSort = IsRouteEntryMode ? CustomerRouteComparer.Instance : null;
-            CustomersView.Refresh();
-            NotifySummaryChanged();
-        }
 
         [RelayCommand]
         private void ImportFromExcel(string filePath)
@@ -926,7 +872,6 @@ namespace ElectricCalculation.ViewModels
                 IsDirty = true;
                 CustomersView.Refresh();
                 NotifySummaryChanged();
-                NotifyRouteEntryProgressChanged();
             }
 
             return new CurrentIndexImportResult(
@@ -1551,6 +1496,110 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
+        [RelayCommand]
+        private async Task ExportLegacySummaryDataSheetWithDialog()
+        {
+            if (Customers.Count == 0)
+            {
+                _ui.ShowMessage("Export ngược ra Excel", "Không có dữ liệu hiện tại để export.");
+                return;
+            }
+
+            string defaultFileName;
+            if (TryParseMonthYear(PeriodLabel, out var month, out var year))
+            {
+                defaultFileName = $"Bang_tong_hop_thu_thang_{month:00}_{year}.xlsx";
+            }
+            else
+            {
+                defaultFileName = "Bang_tong_hop_thu.xlsx";
+            }
+
+            var outputPath = _ui.ShowSaveExcelFileDialog(defaultFileName, title: "Export ngược ra Excel (sheet Data)");
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                return;
+            }
+
+            try
+            {
+                var templatePath = _ui.GetLegacySummaryTemplatePath();
+                if (string.Equals(Path.GetFullPath(outputPath), Path.GetFullPath(templatePath), StringComparison.OrdinalIgnoreCase))
+                {
+                    _ui.ShowMessage("Export ngược ra Excel", "Không thể ghi đè trực tiếp lên file template. Hãy chọn tên file khác.");
+                    return;
+                }
+
+                var customersSnapshot = Customers.ToList();
+                using var busy = _ui.ShowBusyScope("Export ngược ra Excel", "Đang cập nhật sheet Data theo dữ liệu đã sửa...");
+
+                var result = await Task.Run(() =>
+                    ExcelRoundTripExportService.ExportLegacySummaryDataSheet(
+                        templatePath,
+                        outputPath,
+                        customersSnapshot,
+                        PeriodLabel));
+
+                var message = $"Đã cập nhật {result.UpdatedRows} dòng và {result.UpdatedCells} ô trong sheet Data.\n\nFile: {outputPath}";
+                if (result.MissingCustomers > 0)
+                {
+                    var sample = string.Join(", ", result.MissingSequenceNumbers.Take(15));
+                    message += $"\n\nKhông tìm thấy {result.MissingCustomers} khách theo STT trong sheet Data (ví dụ: {sample}{(result.MissingCustomers > 15 ? ", ..." : string.Empty)}).";
+                }
+
+                _ui.ShowMessage("Export ngược ra Excel", message);
+
+                var open = _ui.Confirm(
+                    "Export ngược ra Excel",
+                    "Bạn có muốn mở file Excel vừa xuất để kiểm tra không?");
+
+                if (open)
+                {
+                    _ui.OpenWithDefaultApp(outputPath);
+                }
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("Export ngược ra Excel", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi export ngược ra Excel", ex.Message);
+            }
+        }
+
+        private static bool TryParseMonthYear(string? periodLabel, out int month, out int year)
+        {
+            month = 0;
+            year = 0;
+
+            var text = (periodLabel ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            var match = Regex.Match(text, @"(\d{1,2}).*?(\d{4})", RegexOptions.CultureInvariant);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            if (!int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out month))
+            {
+                return false;
+            }
+
+            if (!int.TryParse(match.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out year))
+            {
+                return false;
+            }
+
+            return month is >= 1 and <= 12 && year is >= 1900 and <= 2200;
+        }
+
         private string AutoSaveAfterCurrentIndexImport()
         {
             try
@@ -1578,57 +1627,6 @@ namespace ElectricCalculation.ViewModels
                 Debug.WriteLine(ex);
                 IsDirty = true;
                 return $"Đã import nhưng tự động lưu thất bại:\n{ex.Message}";
-            }
-        }
-
-        [RelayCommand]
-        private void ExportToExcel(string outputPath)
-        {
-            if (string.IsNullOrWhiteSpace(outputPath))
-            {
-                throw new WarningException("Đường dẫn lưu file Excel không hợp lệ.");
-            }
-
-            if (Customers.Count == 0)
-            {
-                throw new WarningException("Không có dữ liệu trong bảng để export.");
-            }
-
-            // Always use the solution template,
-            // not the last imported workbook.
-            var templatePath = _ui.GetSummaryTemplatePath();
-
-            Services.ExcelExportService.ExportToFile(
-                templatePath,
-                outputPath,
-                Customers,
-                PeriodLabel,
-                InvoiceIssuer);
-        }
-
-        // Export the selected customer to the summary template (for printing in Excel).
-        [RelayCommand]
-        private void ExportToExcelWithDialog()
-        {
-            var outputPath = _ui.ShowSaveExcelFileDialog("Bang tong hop dien.xlsx");
-            if (string.IsNullOrWhiteSpace(outputPath))
-            {
-                return;
-            }
-
-            try
-            {
-                ExportToExcel(outputPath);
-            }
-            catch (WarningException warning)
-            {
-                Debug.WriteLine(warning);
-                _ui.ShowMessage("Cảnh báo export Excel", warning.Message);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex);
-                _ui.ShowMessage("Lỗi export Excel", ex.Message);
             }
         }
 
@@ -2028,31 +2026,32 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
-        private void PrintInvoiceWithDialog()
+        private async Task PrintInvoiceWithDialog()
         {
-            var outputPath = _ui.ShowSaveExcelFileDialog("Hoa don tien dien.xlsx");
-            if (string.IsNullOrWhiteSpace(outputPath))
-            {
-                return;
-            }
-
             try
             {
-                if (SelectedCustomer != null)
+                if (SelectedCustomer == null)
                 {
-                    var templatePath = _ui.GetInvoiceTemplatePath();
+                    _ui.ShowMessage("In Excel", "Hãy chọn một khách trong bảng trước khi in.");
+                    return;
+                }
 
-                    InvoiceExcelExportService.ExportInvoice(
-                        templatePath,
-                        outputPath,
-                        SelectedCustomer,
-                        PeriodLabel,
-                        InvoiceIssuer);
-                }
-                else
+                var outputPath = _ui.ShowSaveExcelFileDialog("Hoa don tien dien.xlsx");
+                if (string.IsNullOrWhiteSpace(outputPath))
                 {
-                    ExportFilteredToExcel(outputPath);
+                    return;
                 }
+
+                var templatePath = _ui.GetInvoiceTemplatePath();
+                using var busy = _ui.ShowBusyScope("In Excel", "Đang tạo hóa đơn, vui lòng chờ...");
+
+                var customer = SelectedCustomer;
+                await Task.Run(() => InvoiceExcelExportService.ExportInvoice(
+                    templatePath,
+                    outputPath,
+                    customer,
+                    PeriodLabel,
+                    InvoiceIssuer));
 
                 var openResult = _ui.Confirm(
                     "In Excel",
@@ -2076,8 +2075,14 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
-        private void PrintInvoicePdfWithDialog()
+        private async Task PrintInvoicePdfWithDialog()
         {
+            if (SelectedCustomer == null)
+            {
+                _ui.ShowMessage("Xuất PDF", "Hãy chọn một khách trong bảng trước khi xuất.");
+                return;
+            }
+
             var outputPdfPath = _ui.ShowSavePdfFileDialog("Hoa don tien dien.pdf");
             if (string.IsNullOrWhiteSpace(outputPdfPath))
             {
@@ -2087,39 +2092,20 @@ namespace ElectricCalculation.ViewModels
             string? tempXlsxPath = null;
             try
             {
-                var customers = SelectedCustomer != null
-                    ? new List<Customer> { SelectedCustomer }
-                    : GetCurrentViewCustomers();
-
-                if (customers.Count == 0)
-                {
-                    _ui.ShowMessage("Xuất PDF", "Không có dữ liệu để xuất.");
-                    return;
-                }
-
                 var templatePath = _ui.GetInvoiceTemplatePath();
                 tempXlsxPath = Path.Combine(Path.GetTempPath(), $"ElectricCalculation_Invoice_{Guid.NewGuid():N}.xlsx");
 
-                if (customers.Count == 1)
-                {
-                    InvoiceExcelExportService.ExportInvoice(
-                        templatePath,
-                        tempXlsxPath,
-                        customers[0],
-                        PeriodLabel,
-                        InvoiceIssuer);
-                }
-                else
-                {
-                    InvoiceExcelExportService.ExportInvoicesToWorkbook(
-                        templatePath,
-                        tempXlsxPath,
-                        customers,
-                        PeriodLabel,
-                        InvoiceIssuer);
-                }
+                using var busy = _ui.ShowBusyScope("Xuất PDF", "Đang tạo hóa đơn, vui lòng chờ...");
 
-                ExcelPdfExportService.ExportWorkbookToPdf(tempXlsxPath, outputPdfPath);
+                var customer = SelectedCustomer;
+                await Task.Run(() => InvoiceExcelExportService.ExportInvoice(
+                    templatePath,
+                    tempXlsxPath,
+                    customer,
+                    PeriodLabel,
+                    InvoiceIssuer));
+
+                await RunStaAsync(() => ExcelPdfExportService.ExportWorkbookToPdf(tempXlsxPath, outputPdfPath));
 
                 var openResult = _ui.Confirm(
                     "Xuất PDF",
@@ -2175,39 +2161,45 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
-        private void PrintMultipleInvoicesWithDialog(IList? selectedItems)
+        private async Task PrintAllInvoicesWithDialog()
         {
+            var outputPath = _ui.ShowSaveExcelFileDialog("Hoa don tien dien (tat ca khach).xlsx");
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                return;
+            }
+
+            var customers = GetCurrentViewCustomers();
+            if (customers.Count == 0)
+            {
+                _ui.ShowMessage("In Excel", "Không có dữ liệu trong danh sách hiện tại để in.");
+                return;
+            }
+
+            var confirm = _ui.Confirm(
+                "In Excel",
+                $"Bạn có chắc muốn in hóa đơn cho tất cả {customers.Count} khách đang hiển thị trên datagrid?");
+
+            if (!confirm)
+            {
+                return;
+            }
+
+            var templatePath = _ui.GetInvoiceTemplatePath();
+            using var busy = _ui.ShowBusyScope("In Excel", $"Đang xử lý {customers.Count} khách, vui lòng chờ...");
+
             try
             {
-                var selectedCustomers = selectedItems?.OfType<Customer>().ToList();
-
-                var customers = selectedCustomers != null && selectedCustomers.Count > 0
-                    ? selectedCustomers
-                    : GetCurrentViewCustomers();
-
-                if (customers.Count == 0)
-                {
-                    _ui.ShowMessage("In nhiều phiếu", "Không có dữ liệu trong danh sách hiện tại để in.");
-                    return;
-                }
-
-                var outputPath = _ui.ShowSaveExcelFileDialog("Hoa don tien dien - nhieu ho.xlsx");
-                if (string.IsNullOrWhiteSpace(outputPath))
-                {
-                    return;
-                }
-
-                var templatePath = _ui.GetInvoiceTemplatePath();
-                InvoiceExcelExportService.ExportHouseholdsAsSingleInvoice(
+                await Task.Run(() => InvoiceExcelExportService.ExportInvoicesToWorkbook(
                     templatePath,
                     outputPath,
                     customers,
                     PeriodLabel,
-                    InvoiceIssuer);
+                    InvoiceIssuer));
 
                 var openResult = _ui.Confirm(
-                    "In nhiều phiếu",
-                    $"Đã tạo 1 hóa đơn gộp {customers.Count} hộ tại:\n{outputPath}\n\nMở file này không?");
+                    "In Excel",
+                    $"Đã tạo file Excel tại:\n{outputPath}\n\nBạn có muốn mở file này bằng Excel để xem / chỉnh sửa và in không?");
 
                 if (openResult)
                 {
@@ -2217,13 +2209,135 @@ namespace ElectricCalculation.ViewModels
             catch (WarningException warning)
             {
                 Debug.WriteLine(warning);
-                _ui.ShowMessage("In nhiều phiếu", warning.Message);
+                _ui.ShowMessage("In Excel", warning.Message);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(ex);
-                _ui.ShowMessage("Lỗi in nhiều phiếu", ex.Message);
+                _ui.ShowMessage("Lỗi in Excel", ex.Message);
             }
+        }
+
+        [RelayCommand]
+        private async Task PrintAllInvoicesPdfWithDialog()
+        {
+            var outputPdfPath = _ui.ShowSavePdfFileDialog("Hoa don tien dien (tat ca khach).pdf");
+            if (string.IsNullOrWhiteSpace(outputPdfPath))
+            {
+                return;
+            }
+
+            string? tempXlsxPath = null;
+            try
+            {
+                var customers = GetCurrentViewCustomers();
+
+                if (customers.Count == 0)
+                {
+                    _ui.ShowMessage("Xuất PDF", "Không có dữ liệu để xuất.");
+                    return;
+                }
+
+                var confirm = _ui.Confirm(
+                    "Xuất PDF",
+                    $"Bạn có chắc muốn in hóa đơn cho tất cả {customers.Count} khách đang hiển thị trên datagrid?");
+
+                if (!confirm)
+                {
+                    return;
+                }
+
+                var templatePath = _ui.GetInvoiceTemplatePath();
+                tempXlsxPath = Path.Combine(Path.GetTempPath(), $"ElectricCalculation_Invoices_{Guid.NewGuid():N}.xlsx");
+
+                using var busy = _ui.ShowBusyScope("Xuất PDF", $"Đang xử lý {customers.Count} khách, vui lòng chờ...");
+
+                await Task.Run(() => InvoiceExcelExportService.ExportInvoicesToWorkbook(
+                    templatePath,
+                    tempXlsxPath,
+                    customers,
+                    PeriodLabel,
+                    InvoiceIssuer));
+
+                await RunStaAsync(() => ExcelPdfExportService.ExportWorkbookToPdf(tempXlsxPath, outputPdfPath));
+
+                var openResult = _ui.Confirm(
+                    "Xuất PDF",
+                    $"Đã tạo file PDF tại:\n{outputPdfPath}\n\nMở file này không?");
+
+                if (openResult)
+                {
+                    _ui.OpenWithDefaultApp(outputPdfPath);
+                }
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("Xuất PDF", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+
+                if (!string.IsNullOrWhiteSpace(tempXlsxPath) && File.Exists(tempXlsxPath))
+                {
+                    try
+                    {
+                        var fallbackXlsxPath = Path.ChangeExtension(outputPdfPath, ".xlsx");
+                        File.Copy(tempXlsxPath, fallbackXlsxPath, overwrite: true);
+                        _ui.ShowMessage(
+                            "Xuất PDF",
+                            $"Không thể xuất PDF (có thể máy chưa cài Microsoft Excel).\n\nĐã lưu file Excel tại:\n{fallbackXlsxPath}");
+                        return;
+                    }
+                    catch
+                    {
+                        // Ignore fallback errors.
+                    }
+                }
+
+                _ui.ShowMessage("Lỗi xuất PDF", ex.Message);
+            }
+            finally
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(tempXlsxPath) && File.Exists(tempXlsxPath))
+                    {
+                        File.Delete(tempXlsxPath);
+                    }
+                }
+                catch
+                {
+                    // Ignore temp cleanup errors.
+                }
+            }
+        }
+
+        private static Task RunStaAsync(Action action)
+        {
+            var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    action();
+                    tcs.TrySetResult(null);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            })
+            {
+                IsBackground = true
+            };
+
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+
+            return tcs.Task;
         }
 
         [RelayCommand]
@@ -2289,7 +2403,6 @@ namespace ElectricCalculation.ViewModels
             }
 
             NotifySummaryChanged();
-            NotifyRouteEntryProgressChanged();
         }
 
         private void Customer_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -2311,14 +2424,11 @@ namespace ElectricCalculation.ViewModels
                 NotifySummaryChanged();
             }
 
-            if (IsRouteEntryMode &&
-                (e.PropertyName == nameof(Customer.Location) ||
-                 e.PropertyName == nameof(Customer.Page) ||
-                 e.PropertyName == nameof(Customer.SequenceNumber)))
+            if (e.PropertyName == nameof(Customer.GroupName))
             {
+                UpdateGroupOptions();
                 CustomersView.Refresh();
                 NotifySummaryChanged();
-                NotifyRouteEntryProgressChanged();
             }
         }
 
@@ -2327,6 +2437,17 @@ namespace ElectricCalculation.ViewModels
             if (item is not Customer customer)
             {
                 return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(SelectedGroup) &&
+                !string.Equals(SelectedGroup.Trim(), AllGroupsOption, StringComparison.CurrentCultureIgnoreCase))
+            {
+                var selectedKey = NormalizeGroupKey(SelectedGroup);
+                var groupKey = NormalizeGroupKey(customer.GroupName);
+                if (!string.Equals(groupKey, selectedKey, StringComparison.CurrentCultureIgnoreCase))
+                {
+                    return false;
+                }
             }
 
             if (FilterMissing || FilterWarning || FilterError)
@@ -2394,6 +2515,119 @@ namespace ElectricCalculation.ViewModels
             RefreshCustomersViewAfterFilterChanged();
         }
 
+        partial void OnSelectedGroupChanged(string value)
+        {
+            RefreshCustomersViewAfterFilterChanged();
+        }
+
+        private void UpdateGroupOptions()
+        {
+            var groups = Customers
+                .Select(c => NormalizeGroupKey(c.GroupName))
+                .Where(g => !string.IsNullOrWhiteSpace(g))
+                .Distinct(StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(g => g, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            var selectedKey = NormalizeGroupKey(SelectedGroup);
+
+            GroupOptions.Clear();
+            GroupOptions.Add(AllGroupsOption);
+            foreach (var group in groups)
+            {
+                GroupOptions.Add(group);
+            }
+
+            if (string.IsNullOrWhiteSpace(selectedKey) ||
+                string.Equals(selectedKey, NormalizeGroupKey(AllGroupsOption), StringComparison.CurrentCultureIgnoreCase))
+            {
+                SelectedGroup = AllGroupsOption;
+                return;
+            }
+
+            var match = GroupOptions
+                .Skip(1)
+                .FirstOrDefault(g => string.Equals(NormalizeGroupKey(g), selectedKey, StringComparison.CurrentCultureIgnoreCase));
+
+            SelectedGroup = match ?? AllGroupsOption;
+        }
+
+        private static string NormalizeGroupKey(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var text = value
+                .Normalize(NormalizationForm.FormKC)
+                .Replace('\u00A0', ' ') // no-break space
+                .Replace('\u2007', ' ') // figure space
+                .Replace('\u202F', ' '); // narrow no-break space
+
+            text = ReplaceDashVariants(text);
+            text = CollapseWhitespace(text).Trim();
+            text = Regex.Replace(text, @"\s*-\s*", " - ");
+            text = CollapseWhitespace(text).Trim();
+
+            return text;
+        }
+
+        private static string ReplaceDashVariants(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            var sb = new StringBuilder(text.Length);
+            foreach (var ch in text)
+            {
+                sb.Append(ch switch
+                {
+                    '\u2010' => '-', // hyphen
+                    '\u2011' => '-', // non-breaking hyphen
+                    '\u2012' => '-', // figure dash
+                    '\u2013' => '-', // en dash
+                    '\u2014' => '-', // em dash
+                    '\u2212' => '-', // minus sign
+                    _ => ch
+                });
+            }
+
+            return sb.ToString();
+        }
+
+        private static string CollapseWhitespace(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            var sb = new StringBuilder(text.Length);
+            var inWhitespace = false;
+
+            foreach (var ch in text)
+            {
+                if (char.IsWhiteSpace(ch))
+                {
+                    if (!inWhitespace)
+                    {
+                        sb.Append(' ');
+                        inWhitespace = true;
+                    }
+
+                    continue;
+                }
+
+                inWhitespace = false;
+                sb.Append(ch);
+            }
+
+            return sb.ToString();
+        }
+
         private static bool ContainsKeyword(string? value, string keyword)
         {
             return !string.IsNullOrWhiteSpace(value) &&
@@ -2413,122 +2647,13 @@ namespace ElectricCalculation.ViewModels
             };
         }
 
-        partial void OnSelectedCustomerChanged(Customer? value)
-        {
-            NotifyRouteEntryProgressChanged();
-        }
 
-        partial void OnIsRouteEntryModeChanged(bool value)
-        {
-            ApplyRouteEntrySort();
-            NotifyRouteEntryProgressChanged();
-        }
 
         partial void OnPeriodLabelChanged(string value)
         {
             if (!_suppressDirty)
             {
                 IsDirty = true;
-            }
-        }
-
-        [RelayCommand]
-        private void PrintMultipleInvoicesPdfWithDialog(IList? selectedItems)
-        {
-            var outputPdfPath = _ui.ShowSavePdfFileDialog("Hoa don tien dien - nhieu khach.pdf");
-            if (string.IsNullOrWhiteSpace(outputPdfPath))
-            {
-                return;
-            }
-
-            string? tempXlsxPath = null;
-            try
-            {
-                var selectedCustomers = selectedItems?.OfType<Customer>().ToList();
-                var customers = selectedCustomers != null && selectedCustomers.Count > 0
-                    ? selectedCustomers
-                    : GetCurrentViewCustomers();
-
-                if (customers.Count == 0)
-                {
-                    _ui.ShowMessage("Xuất PDF", "Không có dữ liệu để xuất.");
-                    return;
-                }
-
-                var templatePath = _ui.GetInvoiceTemplatePath();
-                tempXlsxPath = Path.Combine(Path.GetTempPath(), $"ElectricCalculation_Invoices_{Guid.NewGuid():N}.xlsx");
-
-                if (customers.Count == 1)
-                {
-                    InvoiceExcelExportService.ExportInvoice(
-                        templatePath,
-                        tempXlsxPath,
-                        customers[0],
-                        PeriodLabel,
-                        InvoiceIssuer);
-                }
-                else
-                {
-                    InvoiceExcelExportService.ExportInvoicesToWorkbook(
-                        templatePath,
-                        tempXlsxPath,
-                        customers,
-                        PeriodLabel,
-                        InvoiceIssuer);
-                }
-
-                ExcelPdfExportService.ExportWorkbookToPdf(tempXlsxPath, outputPdfPath);
-
-                var openResult = _ui.Confirm(
-                    "Xuất PDF",
-                    $"Đã tạo file PDF tại:\n{outputPdfPath}\n\nMở file này không?");
-
-                if (openResult)
-                {
-                    _ui.OpenWithDefaultApp(outputPdfPath);
-                }
-            }
-            catch (WarningException warning)
-            {
-                Debug.WriteLine(warning);
-                _ui.ShowMessage("Xuất PDF", warning.Message);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex);
-
-                if (!string.IsNullOrWhiteSpace(tempXlsxPath) && File.Exists(tempXlsxPath))
-                {
-                    try
-                    {
-                        var fallbackXlsxPath = Path.ChangeExtension(outputPdfPath, ".xlsx");
-                        File.Copy(tempXlsxPath, fallbackXlsxPath, overwrite: true);
-                        _ui.ShowMessage(
-                            "Xuất PDF",
-                            $"Không thể xuất PDF (có thể máy chưa cài Microsoft Excel).\n\nĐã lưu file Excel tại:\n{fallbackXlsxPath}");
-                        return;
-                    }
-                    catch
-                    {
-                        // Ignore fallback errors.
-                    }
-                }
-
-                _ui.ShowMessage("Lỗi xuất PDF", ex.Message);
-            }
-            finally
-            {
-                try
-                {
-                    if (!string.IsNullOrWhiteSpace(tempXlsxPath) && File.Exists(tempXlsxPath))
-                    {
-                        File.Delete(tempXlsxPath);
-                    }
-                }
-                catch
-                {
-                    // Ignore temp cleanup errors.
-                }
             }
         }
 

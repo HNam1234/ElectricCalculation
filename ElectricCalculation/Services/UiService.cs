@@ -166,6 +166,68 @@ namespace ElectricCalculation.Services
             dialog.ShowDialog();
         }
 
+        public IDisposable ShowBusyScope(string title, string message)
+        {
+            var owner = GetOwner();
+            var vm = new BusyDialogViewModel(title, message);
+            var dialog = new BusyDialogWindow
+            {
+                Owner = owner,
+                DataContext = vm
+            };
+
+            if (owner != null)
+            {
+                owner.IsEnabled = false;
+            }
+
+            dialog.Show();
+
+            return new BusyScope(owner, dialog);
+        }
+
+        private sealed class BusyScope : IDisposable
+        {
+            private readonly Window? owner;
+            private readonly Window dialog;
+
+            public BusyScope(Window? owner, Window dialog)
+            {
+                this.owner = owner;
+                this.dialog = dialog;
+            }
+
+            public void Dispose()
+            {
+                void CloseOnUi()
+                {
+                    try
+                    {
+                        dialog.Close();
+                    }
+                    catch
+                    {
+                        // Ignore close errors.
+                    }
+
+                    if (owner != null)
+                    {
+                        owner.IsEnabled = true;
+                        owner.Activate();
+                    }
+                }
+
+                if (dialog.Dispatcher.CheckAccess())
+                {
+                    CloseOnUi();
+                }
+                else
+                {
+                    dialog.Dispatcher.Invoke(CloseOnUi);
+                }
+            }
+        }
+
         public void ShowUserGuideDialog()
         {
             var owner = GetOwner();
@@ -291,6 +353,24 @@ namespace ElectricCalculation.Services
             }
 
             throw new WarningException("Không tìm thấy file Excel template tổng hợp (Bảng tổng hợp thu*.xlsx) cạnh solution.");
+        }
+
+        public string GetLegacySummaryTemplatePath()
+        {
+            var rootDir = GetSolutionRootDirectory();
+            var legacyPath = Path.Combine(rootDir, LegacySummaryTemplateFileName);
+            if (File.Exists(legacyPath))
+            {
+                return legacyPath;
+            }
+
+            var packaged = Path.Combine(AppContext.BaseDirectory, PackagedSummaryTemplateRelativePath);
+            if (File.Exists(packaged))
+            {
+                return packaged;
+            }
+
+            return GetSummaryTemplatePath();
         }
 
         public string GetInvoiceTemplatePath()

@@ -212,8 +212,8 @@
                           Command="{Binding ImportFromExcelWithDialogCommand}" />
                 <MenuItem Header="Import chỉ số mới từ Excel..."
                           Command="{Binding ImportCurrentIndexFromExcelWithDialogCommand}" />
-                <MenuItem Header="Export bảng kê ra Excel..."
-                          Command="{Binding ExportToExcelWithDialogCommand}" />
+                <MenuItem Header="Export ngược ra Excel (sheet Data)..."
+                          Command="{Binding ExportLegacySummaryDataSheetWithDialogCommand}" />
             </MenuItem>
 
             <MenuItem Header="_Sửa">
@@ -243,15 +243,13 @@
             <MenuItem Header="_Xuất / In">
                 <MenuItem Header="Xuất hóa đơn (PDF)..."
                           Command="{Binding PrintInvoicePdfWithDialogCommand}" />
-                <MenuItem Header="Xuất nhiều hóa đơn (PDF)..."
-                          Command="{Binding PrintMultipleInvoicesPdfWithDialogCommand}"
-                          CommandParameter="{Binding SelectedItems, ElementName=CustomerGrid}" />
+                <MenuItem Header="Xuất hóa đơn (PDF) (cho tất cả khách)..."
+                          Command="{Binding PrintAllInvoicesPdfWithDialogCommand}" />
                 <Separator />
                 <MenuItem Header="Xuất hóa đơn (Excel)..."
                           Command="{Binding PrintInvoiceWithDialogCommand}" />
-                <MenuItem Header="Xuất nhiều hóa đơn (Excel)..."
-                          Command="{Binding PrintMultipleInvoicesWithDialogCommand}"
-                          CommandParameter="{Binding SelectedItems, ElementName=CustomerGrid}" />
+                <MenuItem Header="Xuất hóa đơn (Excel) (cho tất cả khách)..."
+                          Command="{Binding PrintAllInvoicesWithDialogCommand}" />
                 <MenuItem Header="Xuất hóa đơn theo số..."
                           Command="{Binding PrintInvoicesByRangeWithDialogCommand}" />
             </MenuItem>
@@ -343,10 +341,13 @@
                                       ToolTip="Nhập nhanh: khóa vào cột Chỉ số mới. Enter để xuống dòng."
                                       IsChecked="{Binding IsFastEntryMode, Mode=TwoWay}" />
 
-                        <CheckBox Content="Nhập theo tuyến"
-                                  Margin="12,0,0,0"
+                        <TextBlock Text="Nhóm/Đơn vị:"
+                                   Margin="12,0,4,0"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Width="220"
                                   VerticalAlignment="Center"
-                                  IsChecked="{Binding IsRouteEntryMode, Mode=TwoWay}" />
+                                  ItemsSource="{Binding GroupOptions}"
+                                  SelectedItem="{Binding SelectedGroup, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
                         <TextBlock Text="Lọc:"
                                    Margin="24,0,4,0"
@@ -422,11 +423,6 @@
             <DataGrid.Style>
                 <Style TargetType="{x:Type DataGrid}">
                     <Setter Property="CanUserSortColumns" Value="True" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsRouteEntryMode}" Value="True">
-                            <Setter Property="CanUserSortColumns" Value="False" />
-                        </DataTrigger>
-                    </Style.Triggers>
                 </Style>
             </DataGrid.Style>
             <DataGrid.CellStyle>
@@ -675,12 +671,6 @@
                 Padding="10"
                 Margin="0,8,0,0">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding RouteEntryProgressText}"
-                           Width="260"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding RouteEntryProgressText}"
-                           Visibility="{Binding IsRouteEntryMode, Converter={StaticResource BoolToVisibility}}"
-                           Margin="0,0,16,0" />
                 <TextBlock Text="{Binding CustomerCount, StringFormat=Tổng: {0}}" />
                 <TextBlock Text="{Binding CompletedCount, StringFormat=  |  Đã nhập: {0}}"
                            Margin="16,0,0,0" />

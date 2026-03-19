@@ -40,6 +40,7 @@ namespace ElectricCalculation.Services
             File.Copy(templatePath, outputPath, overwrite: true);
 
             using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Update);
+            var visibleZeroStyleResolver = VisibleZeroStyleResolver.TryLoad(archive);
 
             var workbookEntry = archive.GetEntry("xl/workbook.xml")
                 ?? throw new InvalidOperationException("Invoice template is invalid: missing xl/workbook.xml.");
@@ -103,6 +104,12 @@ namespace ElectricCalculation.Services
             using (var sheetReadStream = sheetEntry.Open())
             {
                 sheetDoc = XDocument.Load(sheetReadStream);
+            }
+
+            if (sheetDoc.Root != null)
+            {
+                EnsureWorksheetShowsZeros(sheetDoc.Root, mainNs);
+                EnsureInvoiceColumnWidths(sheetDoc.Root, mainNs);
             }
 
             var sheetDataElement = sheetDoc.Root?.Element(mainNs + "sheetData")
@@ -232,6 +239,7 @@ namespace ElectricCalculation.Services
             var multiplier = customer.Multiplier <= 0 ? 1 : customer.Multiplier;
             var consumption = customer.Consumption;
             var amount = customer.Amount;
+            var hasValidReading = !customer.IsMissingReading && !customer.HasReadingError;
 
             // B13/C13/D13/F13/G13: indexes, multiplier, subsidy, unit price.
             UpdateNumberCell(sheetDataElement, mainNs, "B13", customer.CurrentIndex);
@@ -240,12 +248,29 @@ namespace ElectricCalculation.Services
             UpdateNumberCell(sheetDataElement, mainNs, "F13", customer.SubsidizedKwh);
             UpdateNumberCell(sheetDataElement, mainNs, "G13", customer.UnitPrice);
 
-            // E13: consumption (kWh).
-            UpdateNumberCell(sheetDataElement, mainNs, "E13", consumption);
+            var worksheetRoot = sheetDoc.Root;
 
-            // H13: amount.
-            UpdateNumberCell(sheetDataElement, mainNs, "H13", amount);
-            UpdateNumberCell(sheetDataElement, mainNs, "H18", amount);
+            // E13: consumption (kWh). Show 0 explicitly for zero-usage rows (template may hide numeric zeros).
+            if (hasValidReading)
+            {
+                UpdateNumberCellVisibleZero(sheetDataElement, worksheetRoot, mainNs, "E13", consumption, visibleZeroStyleResolver);
+            }
+            else
+            {
+                UpdateNumberCell(sheetDataElement, mainNs, "E13", null);
+            }
+
+            // H13/H18: amount. Keep blank for missing/error readings; show 0 explicitly when applicable.
+            if (hasValidReading)
+            {
+                UpdateNumberCellVisibleZero(sheetDataElement, worksheetRoot, mainNs, "H13", amount, visibleZeroStyleResolver);
+                UpdateNumberCellVisibleZero(sheetDataElement, worksheetRoot, mainNs, "H18", amount, visibleZeroStyleResolver);
+            }
+            else
+            {
+                UpdateNumberCell(sheetDataElement, mainNs, "H13", null);
+                UpdateNumberCell(sheetDataElement, mainNs, "H18", null);
+            }
 
             // I13: meter location (optional).
             if (!string.IsNullOrWhiteSpace(location))
@@ -258,10 +283,18 @@ namespace ElectricCalculation.Services
             }
 
             // A19: amount in words.
-            var amountText = VietnameseNumberTextService.ConvertAmountToText(amount);
-            if (!string.IsNullOrWhiteSpace(amountText))
+            if (hasValidReading)
             {
-                UpdateTextCell(sheetDataElement, mainNs, "A19", $"Bằng chữ: {amountText}./.");
+                var amountText = VietnameseNumberTextService.ConvertAmountToText(amount);
+                UpdateTextCell(
+                    sheetDataElement,
+                    mainNs,
+                    "A19",
+                    string.IsNullOrWhiteSpace(amountText) ? string.Empty : $"Bằng chữ: {amountText}./.");
+            }
+            else
+            {
+                UpdateTextCell(sheetDataElement, mainNs, "A19", string.Empty);
             }
 
             UpdateTextCell(
@@ -277,6 +310,8 @@ namespace ElectricCalculation.Services
                 sheetWriteStream.SetLength(0);
                 sheetDoc.Save(sheetWriteStream);
             }
+
+            visibleZeroStyleResolver?.SaveIfDirty();
         }
 
         public static void ExportInvoicesToWorkbook(
@@ -310,6 +345,7 @@ namespace ElectricCalculation.Services
             File.Copy(templatePath, outputPath, overwrite: true);
 
             using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Update);
+            var visibleZeroStyleResolver = VisibleZeroStyleResolver.TryLoad(archive);
 
             var workbookEntry = archive.GetEntry("xl/workbook.xml")
                 ?? throw new InvalidOperationException("Invoice template is invalid: missing xl/workbook.xml.");
@@ -481,10 +517,16 @@ namespace ElectricCalculation.Services
                     sheetDoc = XDocument.Load(sheetReadStream);
                 }
 
+                if (sheetDoc.Root != null)
+                {
+                    EnsureWorksheetShowsZeros(sheetDoc.Root, mainNs);
+                    EnsureInvoiceColumnWidths(sheetDoc.Root, mainNs);
+                }
+
                 var sheetDataElement = sheetDoc.Root?.Element(mainNs + "sheetData")
                     ?? throw new InvalidOperationException("Invoice template worksheet has no sheetData section.");
 
-                PopulateInvoiceSheet(sheetDataElement, mainNs, customer, periodLabel, issuerName);
+                PopulateInvoiceSheet(sheetDataElement, mainNs, customer, periodLabel, issuerName, visibleZeroStyleResolver);
 
                 using (var sheetWriteStream = sheetEntry.Open())
                 {
@@ -510,6 +552,8 @@ namespace ElectricCalculation.Services
                 ctWriteStream.SetLength(0);
                 contentTypesDoc.Save(ctWriteStream);
             }
+
+            visibleZeroStyleResolver?.SaveIfDirty();
         }
 
         public static void ExportHouseholdsAsSingleInvoice(
@@ -547,6 +591,7 @@ namespace ElectricCalculation.Services
             File.Copy(templatePath, outputPath, overwrite: true);
 
             using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Update);
+            var visibleZeroStyleResolver = VisibleZeroStyleResolver.TryLoad(archive);
 
             var workbookEntry = archive.GetEntry("xl/workbook.xml")
                 ?? throw new InvalidOperationException("Invoice template is invalid: missing xl/workbook.xml.");
@@ -639,6 +684,9 @@ namespace ElectricCalculation.Services
             var worksheetRoot = sheetDoc.Root
                 ?? throw new InvalidOperationException("Invoice template worksheet is empty.");
 
+            EnsureWorksheetShowsZeros(worksheetRoot, mainNs);
+            EnsureInvoiceColumnWidths(worksheetRoot, mainNs);
+
             var sheetDataElement = worksheetRoot.Element(mainNs + "sheetData")
                 ?? throw new InvalidOperationException("Invoice template worksheet has no sheetData section.");
 
@@ -648,13 +696,16 @@ namespace ElectricCalculation.Services
                 mainNs,
                 householdList,
                 periodLabel,
-                issuerName);
+                issuerName,
+                visibleZeroStyleResolver);
 
             using (var sheetWriteStream = sheetEntry.Open())
             {
                 sheetWriteStream.SetLength(0);
                 sheetDoc.Save(sheetWriteStream);
             }
+
+            visibleZeroStyleResolver?.SaveIfDirty();
         }
 
         private static void PopulateMultiHouseholdInvoiceSheet(
@@ -663,11 +714,12 @@ namespace ElectricCalculation.Services
             XNamespace mainNs,
             IReadOnlyList<Customer> customers,
             string periodLabel,
-            string issuerName)
+            string issuerName,
+            VisibleZeroStyleResolver? visibleZeroStyleResolver)
         {
             if (customers.Count == 1)
             {
-                PopulateInvoiceSheet(sheetDataElement, mainNs, customers[0], periodLabel, issuerName);
+                PopulateInvoiceSheet(sheetDataElement, mainNs, customers[0], periodLabel, issuerName, visibleZeroStyleResolver);
                 return;
             }
 
@@ -687,6 +739,7 @@ namespace ElectricCalculation.Services
                 ?? throw new InvalidOperationException("Invoice template is missing detail row 13.");
 
             ConfigureMultiHouseholdColumns(worksheetRoot, mainNs);
+            EnsureInvoiceColumnWidths(worksheetRoot, mainNs);
             RemoveAmountColumnMergedRange(worksheetRoot, mainNs);
             RemoveMergeRange(worksheetRoot, mainNs, "J10:K12");
             RemoveMergeRange(worksheetRoot, mainNs, "J13:K14");
@@ -723,17 +776,33 @@ namespace ElectricCalculation.Services
                 var multiplier = customer.Multiplier <= 0 ? 1 : customer.Multiplier;
                 var consumption = customer.Consumption;
                 var amount = customer.Amount;
+                var hasValidReading = !customer.IsMissingReading && !customer.HasReadingError;
                 var displayName = displayNames[i];
 
                 UpdateNumberCell(sheetDataElement, mainNs, $"A{rowIndex}", sequence);
                 UpdateTextCell(sheetDataElement, mainNs, $"B{rowIndex}", displayName);
+                ApplyShrinkToFitTextStyle(sheetDataElement, worksheetRoot, mainNs, $"B{rowIndex}", visibleZeroStyleResolver);
                 UpdateNumberCell(sheetDataElement, mainNs, $"C{rowIndex}", customer.CurrentIndex);
                 UpdateNumberCell(sheetDataElement, mainNs, $"D{rowIndex}", customer.PreviousIndex);
                 UpdateNumberCell(sheetDataElement, mainNs, $"E{rowIndex}", multiplier);
-                UpdateNumberCell(sheetDataElement, mainNs, $"F{rowIndex}", consumption);
+                if (hasValidReading)
+                {
+                    UpdateNumberCellVisibleZero(sheetDataElement, worksheetRoot, mainNs, $"F{rowIndex}", consumption, visibleZeroStyleResolver);
+                }
+                else
+                {
+                    UpdateNumberCell(sheetDataElement, mainNs, $"F{rowIndex}", null);
+                }
                 UpdateNumberCell(sheetDataElement, mainNs, $"G{rowIndex}", customer.SubsidizedKwh);
                 UpdateNumberCell(sheetDataElement, mainNs, $"H{rowIndex}", customer.UnitPrice);
-                UpdateNumberCell(sheetDataElement, mainNs, $"I{rowIndex}", amount);
+                if (hasValidReading)
+                {
+                    UpdateNumberCellVisibleZero(sheetDataElement, worksheetRoot, mainNs, $"I{rowIndex}", amount, visibleZeroStyleResolver);
+                }
+                else
+                {
+                    UpdateNumberCell(sheetDataElement, mainNs, $"I{rowIndex}", null);
+                }
                 CopyCellStyle(sheetDataElement, mainNs, $"H{rowIndex}", $"I{rowIndex}");
             }
 
@@ -842,7 +911,7 @@ namespace ElectricCalculation.Services
             CopyCellStyle(sheetDataElement, mainNs, $"G{totalRow}", $"H{totalRow}");
             UpdateTextCell(sheetDataElement, mainNs, $"G{totalRow}", string.Empty);
             UpdateTextCell(sheetDataElement, mainNs, $"H{totalRow}", "Tổng cộng:");
-            UpdateNumberCell(sheetDataElement, mainNs, $"I{totalRow}", totalAmount);
+            UpdateNumberCellVisibleZero(sheetDataElement, worksheetRoot, mainNs, $"I{totalRow}", totalAmount, visibleZeroStyleResolver);
 
             var amountText = VietnameseNumberTextService.ConvertAmountToText(totalAmount);
             if (!string.IsNullOrWhiteSpace(amountText))
@@ -981,11 +1050,71 @@ namespace ElectricCalculation.Services
         private static List<string> GetMultiHouseholdDetailParts(Customer customer, string baseName)
         {
             var parts = new List<string>();
-            AddMultiHouseholdDetailPart(parts, customer.Location, baseName);
+            AddMultiHouseholdDetailPart(parts, ResolveMultiHouseholdLocation(customer), baseName);
             AddMultiHouseholdDetailPart(parts, customer.MeterNumber, baseName, "Công tơ ");
             AddMultiHouseholdDetailPart(parts, customer.BuildingName, baseName, "Mã sổ ");
             AddMultiHouseholdDetailPart(parts, customer.Address, baseName);
             return parts;
+        }
+
+        private static string? ResolveMultiHouseholdLocation(Customer customer)
+        {
+            var explicitLocation = customer.Location?.Trim();
+            var inferredLocation = InferLocationFromAddress(customer.Address);
+
+            if (!string.IsNullOrWhiteSpace(inferredLocation))
+            {
+                if (string.IsNullOrWhiteSpace(explicitLocation))
+                {
+                    return inferredLocation;
+                }
+
+                if (IsBasementLocation(inferredLocation) && !IsBasementLocation(explicitLocation))
+                {
+                    return inferredLocation;
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(explicitLocation) ? null : explicitLocation;
+        }
+
+        private static bool IsBasementLocation(string value)
+        {
+            return Regex.IsMatch(
+                value,
+                @"\b(thầm|tầng\s*hầm|tang\s*ham|hầm|ham)\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        private static string? InferLocationFromAddress(string? address)
+        {
+            var text = address?.Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            var first = text
+                .Split(new[] { " - ", " – ", " — ", "-", "–", "—" }, 2, StringSplitOptions.None)[0]
+                .Trim();
+
+            first = first.Split(new[] { ',' }, 2)[0].Trim();
+            if (string.IsNullOrWhiteSpace(first))
+            {
+                return null;
+            }
+
+            if (IsBasementLocation(first))
+            {
+                return "Tầng hầm";
+            }
+
+            if (Regex.IsMatch(first, @"\b(tầng|tang|sân|san|trệt|tret|gác|gac|mái|mai)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                return first;
+            }
+
+            return null;
         }
 
         private static string ComposeMultiHouseholdDisplayName(
@@ -1474,7 +1603,8 @@ namespace ElectricCalculation.Services
             XNamespace mainNs,
             Customer customer,
             string periodLabel,
-            string issuerName)
+            string issuerName,
+            VisibleZeroStyleResolver? visibleZeroStyleResolver)
         {
             var period = periodLabel?.Trim() ?? string.Empty;
             var issuer = issuerName?.Trim() ?? string.Empty;
@@ -1574,6 +1704,7 @@ namespace ElectricCalculation.Services
             var multiplier = customer.Multiplier <= 0 ? 1 : customer.Multiplier;
             var consumption = customer.Consumption;
             var amount = customer.Amount;
+            var hasValidReading = !customer.IsMissingReading && !customer.HasReadingError;
 
             UpdateNumberCell(sheetDataElement, mainNs, "B13", customer.CurrentIndex);
             UpdateNumberCell(sheetDataElement, mainNs, "C13", customer.PreviousIndex);
@@ -1581,9 +1712,18 @@ namespace ElectricCalculation.Services
             UpdateNumberCell(sheetDataElement, mainNs, "F13", customer.SubsidizedKwh);
             UpdateNumberCell(sheetDataElement, mainNs, "G13", customer.UnitPrice);
 
-            UpdateNumberCell(sheetDataElement, mainNs, "E13", consumption);
-            UpdateNumberCell(sheetDataElement, mainNs, "H13", amount);
-            UpdateNumberCell(sheetDataElement, mainNs, "H18", amount);
+            if (hasValidReading)
+            {
+                UpdateNumberCellVisibleZero(sheetDataElement, sheetDataElement.Parent as XElement, mainNs, "E13", consumption, visibleZeroStyleResolver);
+                UpdateNumberCellVisibleZero(sheetDataElement, sheetDataElement.Parent as XElement, mainNs, "H13", amount, visibleZeroStyleResolver);
+                UpdateNumberCellVisibleZero(sheetDataElement, sheetDataElement.Parent as XElement, mainNs, "H18", amount, visibleZeroStyleResolver);
+            }
+            else
+            {
+                UpdateNumberCell(sheetDataElement, mainNs, "E13", null);
+                UpdateNumberCell(sheetDataElement, mainNs, "H13", null);
+                UpdateNumberCell(sheetDataElement, mainNs, "H18", null);
+            }
 
             if (!string.IsNullOrWhiteSpace(location))
             {
@@ -1594,10 +1734,18 @@ namespace ElectricCalculation.Services
                 UpdateTextCell(sheetDataElement, mainNs, "I13", string.Empty);
             }
 
-            var amountText = VietnameseNumberTextService.ConvertAmountToText(amount);
-            if (!string.IsNullOrWhiteSpace(amountText))
+            if (hasValidReading)
             {
-                UpdateTextCell(sheetDataElement, mainNs, "A19", $"Bằng chữ: {amountText}./.");
+                var amountText = VietnameseNumberTextService.ConvertAmountToText(amount);
+                UpdateTextCell(
+                    sheetDataElement,
+                    mainNs,
+                    "A19",
+                    string.IsNullOrWhiteSpace(amountText) ? string.Empty : $"Bằng chữ: {amountText}./.");
+            }
+            else
+            {
+                UpdateTextCell(sheetDataElement, mainNs, "A19", string.Empty);
             }
 
             UpdateTextCell(
@@ -1778,6 +1926,447 @@ namespace ElectricCalculation.Services
             }
         }
 
+        private static void UpdateNumberCellVisibleZero(
+            XElement sheetDataElement,
+            XElement? worksheetRoot,
+            XNamespace ns,
+            string cellReference,
+            decimal? value,
+            VisibleZeroStyleResolver? visibleZeroStyleResolver)
+        {
+            if (value is null)
+            {
+                UpdateNumberCell(sheetDataElement, ns, cellReference, null);
+                return;
+            }
+
+            UpdateNumberCell(sheetDataElement, ns, cellReference, value);
+
+            if (value.Value != 0m || visibleZeroStyleResolver == null)
+            {
+                return;
+            }
+
+            var cell = GetCell(sheetDataElement, ns, cellReference, createIfMissing: true);
+            if (cell == null)
+            {
+                return;
+            }
+
+            var baseStyle = (string?)cell.Attribute("s");
+            if (string.IsNullOrWhiteSpace(baseStyle) && worksheetRoot != null)
+            {
+                var colIndex = TryGetColumnIndex(cellReference);
+                if (colIndex > 0)
+                {
+                    baseStyle = TryGetColumnStyleIndex(worksheetRoot, ns, colIndex);
+                }
+            }
+
+            var visibleZeroStyle = visibleZeroStyleResolver.GetVisibleZeroStyleIndex(baseStyle);
+            if (!string.IsNullOrWhiteSpace(visibleZeroStyle))
+            {
+                cell.SetAttributeValue("s", visibleZeroStyle);
+            }
+        }
+
+        private static void ApplyShrinkToFitTextStyle(
+            XElement sheetDataElement,
+            XElement? worksheetRoot,
+            XNamespace ns,
+            string cellReference,
+            VisibleZeroStyleResolver? styleResolver)
+        {
+            if (styleResolver == null)
+            {
+                return;
+            }
+
+            var cell = GetCell(sheetDataElement, ns, cellReference, createIfMissing: false);
+            if (cell == null)
+            {
+                return;
+            }
+
+            var baseStyle = (string?)cell.Attribute("s");
+            if (string.IsNullOrWhiteSpace(baseStyle) && worksheetRoot != null)
+            {
+                var colIndex = TryGetColumnIndex(cellReference);
+                if (colIndex > 0)
+                {
+                    baseStyle = TryGetColumnStyleIndex(worksheetRoot, ns, colIndex);
+                }
+            }
+            var shrinkStyle = styleResolver.GetShrinkToFitStyleIndex(baseStyle);
+            if (!string.IsNullOrWhiteSpace(shrinkStyle))
+            {
+                cell.SetAttributeValue("s", shrinkStyle);
+            }
+        }
+
+        private static int TryGetColumnIndex(string cellReference)
+        {
+            if (string.IsNullOrWhiteSpace(cellReference))
+            {
+                return 0;
+            }
+
+            var letters = new string(cellReference.TakeWhile(char.IsLetter).ToArray()).ToUpperInvariant();
+            if (letters.Length == 0)
+            {
+                return 0;
+            }
+
+            var col = 0;
+            foreach (var ch in letters)
+            {
+                if (ch < 'A' || ch > 'Z')
+                {
+                    return 0;
+                }
+
+                col = (col * 26) + (ch - 'A' + 1);
+            }
+
+            return col;
+        }
+
+        private static string? TryGetColumnStyleIndex(XElement worksheetRoot, XNamespace ns, int columnIndex)
+        {
+            if (columnIndex <= 0)
+            {
+                return null;
+            }
+
+            var cols = worksheetRoot.Element(ns + "cols");
+            if (cols == null)
+            {
+                return null;
+            }
+
+            foreach (var col in cols.Elements(ns + "col"))
+            {
+                var min = (int?)col.Attribute("min") ?? 0;
+                var max = (int?)col.Attribute("max") ?? 0;
+                if (min <= 0 || max <= 0)
+                {
+                    continue;
+                }
+
+                if (columnIndex < min || columnIndex > max)
+                {
+                    continue;
+                }
+
+                var style = (string?)col.Attribute("style");
+                return string.IsNullOrWhiteSpace(style) ? null : style;
+            }
+
+            return null;
+        }
+
+        private sealed class VisibleZeroStyleResolver
+        {
+            private const string StylesEntryPath = "xl/styles.xml";
+            private const int DefaultCustomNumFmtStart = 164;
+
+            private readonly ZipArchiveEntry stylesEntry;
+            private readonly XDocument stylesDoc;
+            private readonly XNamespace ns;
+            private readonly Dictionary<int, int> visibleZeroStyleCache = new();
+            private readonly Dictionary<int, int> shrinkToFitStyleCache = new();
+
+            private bool isDirty;
+
+            private VisibleZeroStyleResolver(ZipArchiveEntry stylesEntry, XDocument stylesDoc)
+            {
+                this.stylesEntry = stylesEntry;
+                this.stylesDoc = stylesDoc;
+                ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            }
+
+            public static VisibleZeroStyleResolver? TryLoad(ZipArchive archive)
+            {
+                var entry = archive.GetEntry(StylesEntryPath);
+                if (entry == null)
+                {
+                    return null;
+                }
+
+                XDocument doc;
+                using (var stream = entry.Open())
+                {
+                    doc = XDocument.Load(stream);
+                }
+
+                return new VisibleZeroStyleResolver(entry, doc);
+            }
+
+            public string? GetVisibleZeroStyleIndex(string? baseStyleIndex)
+            {
+                if (string.IsNullOrWhiteSpace(baseStyleIndex))
+                {
+                    return baseStyleIndex;
+                }
+
+                if (!int.TryParse(baseStyleIndex, NumberStyles.Integer, CultureInfo.InvariantCulture, out var baseIndex) ||
+                    baseIndex < 0)
+                {
+                    return baseStyleIndex;
+                }
+
+                if (visibleZeroStyleCache.TryGetValue(baseIndex, out var cached))
+                {
+                    return cached.ToString(CultureInfo.InvariantCulture);
+                }
+
+                var styleSheet = stylesDoc.Root;
+                if (styleSheet == null)
+                {
+                    return baseStyleIndex;
+                }
+
+                var cellXfs = styleSheet.Element(ns + "cellXfs");
+                if (cellXfs == null)
+                {
+                    return baseStyleIndex;
+                }
+
+                var xfs = cellXfs.Elements(ns + "xf").ToList();
+                if (baseIndex >= xfs.Count)
+                {
+                    return baseStyleIndex;
+                }
+
+                var baseXf = xfs[baseIndex];
+                var numFmtId = (int?)baseXf.Attribute("numFmtId") ?? 0;
+                if (!TryGetFormatCode(styleSheet, numFmtId, out var formatCode))
+                {
+                    return baseStyleIndex;
+                }
+
+                if (!TryMakeZeroVisibleFormat(formatCode, out var visibleZeroFormat))
+                {
+                    return baseStyleIndex;
+                }
+
+                var newNumFmtId = GetOrCreateNumFmtId(styleSheet, visibleZeroFormat);
+                var newXf = new XElement(baseXf);
+                newXf.SetAttributeValue("numFmtId", newNumFmtId.ToString(CultureInfo.InvariantCulture));
+                newXf.SetAttributeValue("applyNumberFormat", "1");
+                cellXfs.Add(newXf);
+
+                var newStyleIndex = xfs.Count;
+                cellXfs.SetAttributeValue("count", (newStyleIndex + 1).ToString(CultureInfo.InvariantCulture));
+
+                visibleZeroStyleCache[baseIndex] = newStyleIndex;
+                isDirty = true;
+
+                return newStyleIndex.ToString(CultureInfo.InvariantCulture);
+            }
+
+            public string? GetShrinkToFitStyleIndex(string? baseStyleIndex)
+            {
+                if (string.IsNullOrWhiteSpace(baseStyleIndex))
+                {
+                    return baseStyleIndex;
+                }
+
+                if (!int.TryParse(baseStyleIndex, NumberStyles.Integer, CultureInfo.InvariantCulture, out var baseIndex) ||
+                    baseIndex < 0)
+                {
+                    return baseStyleIndex;
+                }
+
+                if (shrinkToFitStyleCache.TryGetValue(baseIndex, out var cached))
+                {
+                    return cached.ToString(CultureInfo.InvariantCulture);
+                }
+
+                var styleSheet = stylesDoc.Root;
+                if (styleSheet == null)
+                {
+                    return baseStyleIndex;
+                }
+
+                var cellXfs = styleSheet.Element(ns + "cellXfs");
+                if (cellXfs == null)
+                {
+                    return baseStyleIndex;
+                }
+
+                var xfs = cellXfs.Elements(ns + "xf").ToList();
+                if (baseIndex >= xfs.Count)
+                {
+                    return baseStyleIndex;
+                }
+
+                var baseXf = xfs[baseIndex];
+                var baseAlignment = baseXf.Element(ns + "alignment");
+                if (baseAlignment != null && string.Equals((string?)baseAlignment.Attribute("shrinkToFit"), "1", StringComparison.Ordinal))
+                {
+                    shrinkToFitStyleCache[baseIndex] = baseIndex;
+                    return baseStyleIndex;
+                }
+
+                var newXf = new XElement(baseXf);
+                var alignment = newXf.Element(ns + "alignment");
+                if (alignment == null)
+                {
+                    alignment = new XElement(ns + "alignment");
+                    newXf.Add(alignment);
+                }
+
+                alignment.SetAttributeValue("shrinkToFit", "1");
+                if (string.IsNullOrWhiteSpace((string?)alignment.Attribute("horizontal")))
+                {
+                    alignment.SetAttributeValue("horizontal", "left");
+                }
+
+                newXf.SetAttributeValue("applyAlignment", "1");
+                cellXfs.Add(newXf);
+
+                var newStyleIndex = xfs.Count;
+                cellXfs.SetAttributeValue("count", (newStyleIndex + 1).ToString(CultureInfo.InvariantCulture));
+
+                shrinkToFitStyleCache[baseIndex] = newStyleIndex;
+                isDirty = true;
+
+                return newStyleIndex.ToString(CultureInfo.InvariantCulture);
+            }
+
+            public void SaveIfDirty()
+            {
+                if (!isDirty)
+                {
+                    return;
+                }
+
+                using var stream = stylesEntry.Open();
+                stream.SetLength(0);
+                stylesDoc.Save(stream);
+            }
+
+            private static bool TryGetFormatCode(XElement styleSheet, int numFmtId, out string formatCode)
+            {
+                formatCode = string.Empty;
+
+                var ns = styleSheet.Name.Namespace;
+                var numFmts = styleSheet.Element(ns + "numFmts");
+                if (numFmts == null)
+                {
+                    return false;
+                }
+
+                var numFmt = numFmts
+                    .Elements(ns + "numFmt")
+                    .FirstOrDefault(e => (int?)e.Attribute("numFmtId") == numFmtId);
+
+                formatCode = (string?)numFmt?.Attribute("formatCode") ?? string.Empty;
+                return !string.IsNullOrWhiteSpace(formatCode);
+            }
+
+            private int GetOrCreateNumFmtId(XElement styleSheet, string formatCode)
+            {
+                var numFmts = styleSheet.Element(ns + "numFmts");
+                if (numFmts == null)
+                {
+                    numFmts = new XElement(ns + "numFmts");
+                    var cellStyleXfs = styleSheet.Element(ns + "cellStyleXfs");
+                    if (cellStyleXfs != null)
+                    {
+                        cellStyleXfs.AddBeforeSelf(numFmts);
+                    }
+                    else
+                    {
+                        styleSheet.AddFirst(numFmts);
+                    }
+                }
+
+                var existing = numFmts
+                    .Elements(ns + "numFmt")
+                    .FirstOrDefault(e => string.Equals((string?)e.Attribute("formatCode"), formatCode, StringComparison.Ordinal));
+
+                if (existing != null)
+                {
+                    return (int?)existing.Attribute("numFmtId") ?? DefaultCustomNumFmtStart;
+                }
+
+                var maxId = numFmts
+                    .Elements(ns + "numFmt")
+                    .Select(e => (int?)e.Attribute("numFmtId"))
+                    .Where(v => v != null)
+                    .Select(v => v!.Value)
+                    .DefaultIfEmpty(DefaultCustomNumFmtStart - 1)
+                    .Max();
+
+                var newId = Math.Max(DefaultCustomNumFmtStart, maxId + 1);
+                numFmts.Add(new XElement(ns + "numFmt",
+                    new XAttribute("numFmtId", newId.ToString(CultureInfo.InvariantCulture)),
+                    new XAttribute("formatCode", formatCode)));
+
+                var count = numFmts.Elements(ns + "numFmt").Count();
+                numFmts.SetAttributeValue("count", count.ToString(CultureInfo.InvariantCulture));
+
+                isDirty = true;
+                return newId;
+            }
+
+            private static bool TryMakeZeroVisibleFormat(string formatCode, out string visibleZeroFormat)
+            {
+                visibleZeroFormat = string.Empty;
+                if (string.IsNullOrWhiteSpace(formatCode))
+                {
+                    return false;
+                }
+
+                var sections = SplitFormatSections(formatCode);
+                if (sections.Count < 3)
+                {
+                    return false;
+                }
+
+                if (string.Equals(sections[2], sections[0], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                sections[2] = sections[0];
+                visibleZeroFormat = string.Join(";", sections);
+                return !string.IsNullOrWhiteSpace(visibleZeroFormat) &&
+                       !string.Equals(visibleZeroFormat, formatCode, StringComparison.Ordinal);
+            }
+
+            private static List<string> SplitFormatSections(string formatCode)
+            {
+                var sections = new List<string>();
+                var current = new StringBuilder();
+                var inQuotes = false;
+
+                foreach (var ch in formatCode)
+                {
+                    if (ch == '"')
+                    {
+                        inQuotes = !inQuotes;
+                        current.Append(ch);
+                        continue;
+                    }
+
+                    if (ch == ';' && !inQuotes)
+                    {
+                        sections.Add(current.ToString());
+                        current.Clear();
+                        continue;
+                    }
+
+                    current.Append(ch);
+                }
+
+                sections.Add(current.ToString());
+                return sections;
+            }
+        }
+
         private static void CopyCellStyle(
             XElement sheetDataElement,
             XNamespace ns,
@@ -1908,6 +2497,116 @@ namespace ElectricCalculation.Services
             }
 
             return cell;
+        }
+
+        private static void EnsureWorksheetShowsZeros(XElement worksheetRoot, XNamespace mainNs)
+        {
+            var sheetViews = worksheetRoot.Element(mainNs + "sheetViews");
+            if (sheetViews == null)
+            {
+                return;
+            }
+
+            foreach (var view in sheetViews.Elements(mainNs + "sheetView"))
+            {
+                view.SetAttributeValue("showZeros", "1");
+            }
+        }
+
+        private static void EnsureInvoiceColumnWidths(XElement worksheetRoot, XNamespace mainNs)
+        {
+            // Excel shows #### when a numeric value doesn't fit the column width.
+            // Amount columns (H/I) must handle big totals (hundreds of millions+).
+            const double amountColumnWidth = 24.7109375;
+
+            EnsureMinColumnWidth(worksheetRoot, mainNs, 8, amountColumnWidth); // H
+            EnsureMinColumnWidth(worksheetRoot, mainNs, 9, amountColumnWidth); // I
+        }
+
+        private static void EnsureMinColumnWidth(
+            XElement worksheetRoot,
+            XNamespace mainNs,
+            int columnIndex,
+            double minWidth)
+        {
+            if (columnIndex <= 0 || minWidth <= 0)
+            {
+                return;
+            }
+
+            var cols = worksheetRoot.Element(mainNs + "cols");
+            if (cols == null)
+            {
+                cols = new XElement(mainNs + "cols");
+                var sheetData = worksheetRoot.Element(mainNs + "sheetData");
+                if (sheetData != null)
+                {
+                    sheetData.AddBeforeSelf(cols);
+                }
+                else
+                {
+                    worksheetRoot.Add(cols);
+                }
+            }
+
+            XElement? bestMatch = null;
+            var bestSpan = int.MaxValue;
+
+            foreach (var col in cols.Elements(mainNs + "col"))
+            {
+                var min = (int?)col.Attribute("min") ?? 0;
+                var max = (int?)col.Attribute("max") ?? 0;
+                if (min <= 0 || max <= 0 || columnIndex < min || columnIndex > max)
+                {
+                    continue;
+                }
+
+                var span = max - min;
+                if (span < bestSpan)
+                {
+                    bestSpan = span;
+                    bestMatch = col;
+                }
+            }
+
+            if (bestMatch == null)
+            {
+                var newCol = new XElement(mainNs + "col",
+                    new XAttribute("min", columnIndex),
+                    new XAttribute("max", columnIndex),
+                    new XAttribute("width", minWidth.ToString("0.########", CultureInfo.InvariantCulture)),
+                    new XAttribute("customWidth", 1));
+
+                var inserted = false;
+                foreach (var existing in cols.Elements(mainNs + "col").ToList())
+                {
+                    var existingMin = (int?)existing.Attribute("min") ?? int.MaxValue;
+                    if (existingMin > columnIndex)
+                    {
+                        existing.AddBeforeSelf(newCol);
+                        inserted = true;
+                        break;
+                    }
+                }
+
+                if (!inserted)
+                {
+                    cols.Add(newCol);
+                }
+
+                return;
+            }
+
+            var widthText = (string?)bestMatch.Attribute("width");
+            var currentWidth = double.TryParse(widthText, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : 0;
+
+            if (currentWidth < minWidth)
+            {
+                bestMatch.SetAttributeValue("width", minWidth.ToString("0.########", CultureInfo.InvariantCulture));
+                bestMatch.SetAttributeValue("customWidth", 1);
+            }
         }
 
         private static string? FormatPeriodLabel(string periodLabel)
