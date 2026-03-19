@@ -462,7 +462,19 @@
 
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="{x:Type DataGridColumnHeader}"
-                       BasedOn="{StaticResource DataGridColumnHeaderBaseStyle}" />
+                       BasedOn="{StaticResource DataGridColumnHeaderBaseStyle}">
+                    <Setter Property="Tag"
+                            Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+                    <Setter Property="ContextMenu">
+                        <Setter.Value>
+                            <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="Đặt toàn bộ cột..."
+                                          Command="{Binding SetColumnValueCommand}"
+                                          CommandParameter="{Binding PlacementTarget.Column, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            </ContextMenu>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
             </DataGrid.ColumnHeaderStyle>
 
             <DataGrid.ContextMenu>
@@ -471,6 +483,10 @@
                               Command="{Binding UndoCommand}" />
                     <MenuItem Header="Redo (Ctrl+Y)"
                               Command="{Binding RedoCommand}" />
+                    <Separator />
+                    <MenuItem Header="Đặt toàn bộ cột hiện tại..."
+                              Command="{Binding SetColumnValueCommand}"
+                              CommandParameter="{Binding PlacementTarget.CurrentColumn, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                     <Separator />
                     <MenuItem Header="Nhân đôi dòng (Ctrl+Shift+D)"
                               Command="{Binding DuplicateRowCommand}"

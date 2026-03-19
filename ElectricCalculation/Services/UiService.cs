@@ -229,6 +229,18 @@ namespace ElectricCalculation.Services
             return dialog.ShowDialog() == true ? vm : null;
         }
 
+        public string? ShowSetColumnValueDialog(string columnTitle, string? initialValue = null)
+        {
+            var vm = new SetColumnValueViewModel(columnTitle, initialValue);
+            var dialog = new SetColumnValueWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            return dialog.ShowDialog() == true ? vm.ValueText : null;
+        }
+
         public NewDatasetCreationOption? ShowNewDatasetOptionsDialog()
         {
             var vm = new NewDatasetOptionsViewModel();

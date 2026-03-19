@@ -1,0 +1,37 @@
+<Window x:Class="ElectricCalculation.Views.SetColumnValueWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        Title="Đặt toàn bộ cột"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="ToolWindow"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Margin="0,0,0,10" Opacity="0.85" TextWrapping="Wrap" MaxWidth="520">
+            <Run Text="Cột: " />
+            <Run Text="{Binding ColumnTitle}" FontWeight="SemiBold" />
+        </TextBlock>
+
+        <StackPanel Grid.Row="1" Margin="0,0,0,12">
+            <TextBlock Text="Giá trị áp dụng cho toàn bộ cột:" Margin="0,0,0,6" />
+            <TextBox Width="380"
+                     Text="{Binding ValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     VerticalContentAlignment="Center"
+                     MinHeight="26" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button MinWidth="90" Margin="0,0,8,0" Content="Áp dụng" IsDefault="True" Command="{Binding OkCommand}" />
+            <Button MinWidth="80" Content="Hủy" IsCancel="True" Command="{Binding CancelCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>
+

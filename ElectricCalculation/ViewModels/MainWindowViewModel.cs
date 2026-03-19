@@ -9,6 +9,7 @@ using System.IO;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -332,7 +333,7 @@ namespace ElectricCalculation.ViewModels
                 customer.PerformedBy = InvoiceIssuer;
             }
 
-            ApplyDefaultsIfNeeded(customer, applyWhen: _settings.ApplyDefaultsOnNewRow);
+            ApplyDefaultsIfNeeded(customer, applyWhen: _settings.ApplyDefaultsOnNewRow, allowOverwriteExistingValues: true);
             var insertIndex = Customers.Count;
 
             ExecuteUndoable(new DelegateUndoableAction(
@@ -655,7 +656,9 @@ namespace ElectricCalculation.ViewModels
                     customer.PerformedBy = InvoiceIssuer;
                 }
 
-                ApplyDefaultsIfNeeded(customer, applyWhen: _settings.ApplyDefaultsOnImport);
+                // Import is a full replace (Customers.ReplaceRange). Defaults should fill missing values,
+                // but should not overwrite values explicitly provided by Excel.
+                ApplyDefaultsIfNeeded(customer, applyWhen: _settings.ApplyDefaultsOnImport, allowOverwriteExistingValues: false);
                 prepared.Add(customer);
             }
 
@@ -1004,13 +1007,17 @@ namespace ElectricCalculation.ViewModels
             }
         }
 
-        private void ApplyDefaultsIfNeeded(Customer customer, bool applyWhen)
+        private void ApplyDefaultsIfNeeded(Customer customer, bool applyWhen, bool allowOverwriteExistingValues)
         {
             var s = _settings ?? new AppSettings();
-            ApplyDefaultsIfNeeded(customer, applyWhen, s);
+            ApplyDefaultsIfNeeded(customer, applyWhen, s, allowOverwriteExistingValues);
         }
 
-        private void ApplyDefaultsIfNeeded(Customer customer, bool applyWhen, AppSettings settings)
+        private void ApplyDefaultsIfNeeded(
+            Customer customer,
+            bool applyWhen,
+            AppSettings settings,
+            bool allowOverwriteExistingValues)
         {
             if (!applyWhen || customer == null)
             {
@@ -1018,7 +1025,7 @@ namespace ElectricCalculation.ViewModels
             }
 
             var s = settings ?? new AppSettings();
-            var overwrite = s.OverrideExistingValues;
+            var overwrite = allowOverwriteExistingValues && s.OverrideExistingValues;
 
             if (overwrite || customer.UnitPrice <= 0)
             {
@@ -1176,6 +1183,75 @@ namespace ElectricCalculation.ViewModels
             }
 
             ExecuteUndoable(new CompositeUndoableAction("Fill-down", actions));
+        }
+
+        [RelayCommand]
+        private void SetColumnValue(DataGridColumn? column)
+        {
+            if (column == null)
+            {
+                return;
+            }
+
+            var propertyName = GetPropertyName(column);
+            if (string.IsNullOrWhiteSpace(propertyName))
+            {
+                _ui.ShowMessage("Đặt toàn bộ cột", "Không xác định được cột cần chỉnh (cột không có binding).");
+                return;
+            }
+
+            if (!TryGetWritableCustomerProperty(propertyName, out var property))
+            {
+                _ui.ShowMessage("Đặt toàn bộ cột", $"Cột '{column.Header}' không hỗ trợ chỉnh sửa hàng loạt.");
+                return;
+            }
+
+            var columnTitle = (column.Header?.ToString() ?? propertyName).Trim();
+            var initialValue = Customers.Count > 0
+                ? Convert.ToString(property.GetValue(Customers[0]), CultureInfo.CurrentCulture)
+                : null;
+
+            var text = _ui.ShowSetColumnValueDialog(columnTitle, initialValue);
+            if (text == null)
+            {
+                return;
+            }
+
+            if (!TryConvertText(text, property.PropertyType, out var converted))
+            {
+                _ui.ShowMessage("Đặt toàn bộ cột", $"Giá trị '{text}' không hợp lệ cho cột '{columnTitle}'.");
+                return;
+            }
+
+            if (Customers.Count == 0)
+            {
+                return;
+            }
+
+            var actions = new List<IUndoableAction>();
+            foreach (var customer in Customers)
+            {
+                var before = property.GetValue(customer);
+                if (Equals(before, converted))
+                {
+                    continue;
+                }
+
+                var capturedCustomer = customer;
+                var capturedBefore = before;
+                var capturedAfter = converted;
+                actions.Add(new DelegateUndoableAction(
+                    name: "Đặt toàn bộ cột",
+                    undo: () => property.SetValue(capturedCustomer, capturedBefore),
+                    redo: () => property.SetValue(capturedCustomer, capturedAfter)));
+            }
+
+            if (actions.Count == 0)
+            {
+                return;
+            }
+
+            ExecuteUndoable(new CompositeUndoableAction($"Đặt cột: {columnTitle}", actions));
         }
 
         [RelayCommand]
@@ -1357,6 +1433,21 @@ namespace ElectricCalculation.ViewModels
             {
                 return false;
             }
+        }
+
+        private static string? GetPropertyName(DataGridColumn? column)
+        {
+            if (column is not DataGridBoundColumn bound)
+            {
+                return null;
+            }
+
+            if (bound.Binding is not Binding binding)
+            {
+                return null;
+            }
+
+            return binding.Path?.Path;
         }
 
         private static List<string[]> ParseClipboardMatrix(string text)
