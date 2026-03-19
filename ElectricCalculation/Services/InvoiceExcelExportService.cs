@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using ElectricCalculation.Helpers;
 using ElectricCalculation.Models;
 
 namespace ElectricCalculation.Services
@@ -141,7 +142,7 @@ namespace ElectricCalculation.Services
             var receiptNumber = customer.SequenceNumber > 0 ? customer.SequenceNumber : 1;
 
             var representativeName = customer.RepresentativeName?.Trim() ?? string.Empty;
-            var groupName = customer.GroupName?.Trim() ?? string.Empty;
+            var groupName = TextNormalization.NormalizeForDisplay(customer.GroupName);
             var name = !string.IsNullOrWhiteSpace(representativeName) ? representativeName : householdName;
             var address = customer.Address?.Trim() ?? string.Empty;
             var location = customer.Location?.Trim() ?? string.Empty;
@@ -751,7 +752,11 @@ namespace ElectricCalculation.Services
                 $"A{amountInWordsRow}:H{amountInWordsRow}",
                 $"A{amountInWordsRow}:I{amountInWordsRow}");
 
-            var groupName = GetSharedNonEmptyValue(customers, c => c.GroupName) ?? "Nhiều hộ";
+            var groupName = TextNormalization.NormalizeForDisplay(GetSharedNonEmptyValue(customers, c => c.GroupName));
+            if (string.IsNullOrWhiteSpace(groupName))
+            {
+                groupName = "Nhiều hộ";
+            }
             var sharedAddress = GetSharedNonEmptyValue(customers, c => c.Address) ?? string.Empty;
             var sharedRepresentative = GetSharedNonEmptyValue(customers, c => c.RepresentativeName) ?? string.Empty;
             var sharedHouseholdPhone = GetSharedNonEmptyValue(customers, c => c.HouseholdPhone) ?? string.Empty;
@@ -1483,7 +1488,7 @@ namespace ElectricCalculation.Services
             var receiptNumber = customer.SequenceNumber > 0 ? customer.SequenceNumber : 1;
 
             var representativeName = customer.RepresentativeName?.Trim() ?? string.Empty;
-            var groupName = customer.GroupName?.Trim() ?? string.Empty;
+            var groupName = TextNormalization.NormalizeForDisplay(customer.GroupName);
             var name = !string.IsNullOrWhiteSpace(representativeName) ? representativeName : householdName;
             var address = customer.Address?.Trim() ?? string.Empty;
             var location = customer.Location?.Trim() ?? string.Empty;

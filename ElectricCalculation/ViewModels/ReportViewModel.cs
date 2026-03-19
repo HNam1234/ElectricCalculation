@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ElectricCalculation.Helpers;
 using ElectricCalculation.Models;
 using ElectricCalculation.Services;
 
@@ -14,6 +15,8 @@ namespace ElectricCalculation.ViewModels
 {
     public partial class ReportItem : ObservableObject
     {
+        public string GroupKey { get; init; } = string.Empty;
+
         [ObservableProperty]
         private string groupName = string.Empty;
 
@@ -142,18 +145,38 @@ namespace ElectricCalculation.ViewModels
             _sourceCustomers = customers?.ToList() ?? new List<Customer>();
 
             var groups = _sourceCustomers
-                .GroupBy(c => string.IsNullOrWhiteSpace(c.GroupName) ? "(Không có nhóm)" : c.GroupName)
-                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase);
+                .GroupBy(c => TextNormalization.BuildGroupKey(c.GroupName))
+                .Select(g =>
+                {
+                    var raw = g
+                        .Select(c => c.GroupName)
+                        .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+                    var display = TextNormalization.NormalizeForDisplay(raw);
+                    if (string.IsNullOrWhiteSpace(display))
+                    {
+                        display = "(Không có nhóm)";
+                    }
+
+                    return new
+                    {
+                        GroupKey = g.Key,
+                        GroupName = display,
+                        Customers = g
+                    };
+                })
+                .OrderBy(g => g.GroupName, StringComparer.CurrentCultureIgnoreCase);
 
             foreach (var g in groups)
             {
                 var item = new ReportItem
                 {
-                    GroupName = g.Key,
-                    CustomerCount = g.Count(),
-                    TotalConsumption = g.Sum(c => c.Consumption),
-                    TotalChargeableKwh = g.Sum(c => c.ChargeableKwh),
-                    TotalAmount = g.Sum(c => c.Amount)
+                    GroupKey = g.GroupKey,
+                    GroupName = g.GroupName,
+                    CustomerCount = g.Customers.Count(),
+                    TotalConsumption = g.Customers.Sum(c => c.Consumption),
+                    TotalChargeableKwh = g.Customers.Sum(c => c.ChargeableKwh),
+                    TotalAmount = g.Customers.Sum(c => c.Amount)
                 };
 
                 Items.Add(item);
@@ -395,12 +418,12 @@ namespace ElectricCalculation.ViewModels
                 return Enumerable.Empty<Customer>();
             }
 
-            var target = item.GroupName ?? string.Empty;
+            var targetKey = item.GroupKey ?? string.Empty;
 
             return _sourceCustomers.Where(c =>
             {
-                var key = string.IsNullOrWhiteSpace(c.GroupName) ? "(Không có nhóm)" : c.GroupName;
-                return string.Equals(key, target, StringComparison.CurrentCultureIgnoreCase);
+                var key = TextNormalization.BuildGroupKey(c.GroupName);
+                return string.Equals(key, targetKey, StringComparison.Ordinal);
             });
         }
 
