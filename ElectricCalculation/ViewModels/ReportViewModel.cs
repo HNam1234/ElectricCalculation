@@ -208,29 +208,47 @@ namespace ElectricCalculation.ViewModels
         [RelayCommand]
         private void PrintGroup()
         {
-            var item = SelectedItem;
-            if (item == null)
-            {
-                _ui.ShowMessage("In hóa đơn nhóm", "Hãy chọn một nhóm / đơn vị ở bảng bên phải trước.");
-                return;
-            }
-
-            var customers = GetCustomersForGroup(item)
-                .OrderBy(c => c.SequenceNumber)
-                .ToList();
-
-            if (customers.Count == 0)
-            {
-                _ui.ShowMessage("In hóa đơn nhóm", "Nhóm được chọn hiện không có dữ liệu khách hàng.");
-                return;
-            }
-
             try
             {
+                var item = SelectedItem;
+                if (item == null)
+                {
+                    _ui.ShowMessage("In hóa đơn nhóm", "Hãy chọn một nhóm / đơn vị ở bảng bên phải trước.");
+                    return;
+                }
+
+                var customers = GetCustomersForGroup(item)
+                    .Where(c => c != null)
+                    .OrderBy(c => c.SequenceNumber)
+                    .ToList();
+
+                if (customers.Count == 0)
+                {
+                    _ui.ShowMessage("In hóa đơn nhóm", "Nhóm được chọn hiện không có dữ liệu khách hàng.");
+                    return;
+                }
+
                 var groupName = string.IsNullOrWhiteSpace(item.GroupName) ? "(Không có nhóm)" : item.GroupName.Trim();
+
+                var selectedCustomers = _ui.ShowGroupInvoiceSelectionDialog(groupName, customers);
+                if (selectedCustomers == null)
+                {
+                    return;
+                }
+
+                customers = selectedCustomers
+                    .OrderBy(c => c.SequenceNumber)
+                    .ToList();
+
+                if (customers.Count == 0)
+                {
+                    _ui.ShowMessage("In hóa đơn nhóm", "Bạn chưa chọn hộ nào để in.");
+                    return;
+                }
+
                 var confirm = _ui.Confirm(
                     "In hóa đơn nhóm",
-                    $"Nhóm: {groupName}\nSố khách: {customers.Count}\n\nXuất 1 hóa đơn gộp cho nhóm này?");
+                    $"Nhóm: {groupName}\nSố khách đã chọn: {customers.Count}\n\nXuất 1 hóa đơn gộp cho nhóm này?");
 
                 if (!confirm)
                 {
@@ -258,7 +276,7 @@ namespace ElectricCalculation.ViewModels
 
                 _ui.ShowMessage(
                     "In hóa đơn nhóm",
-                    $"Đã tạo {sheetCount} sheet hóa đơn nhóm ({customers.Count} khách) cho '{groupName}' tại:\n{outputPath}");
+                    $"Đã tạo {sheetCount} sheet hóa đơn nhóm ({customers.Count} hộ) cho '{groupName}' tại:\n{outputPath}");
             }
             catch (WarningException warning)
             {
@@ -273,32 +291,32 @@ namespace ElectricCalculation.ViewModels
         [RelayCommand]
         private void PrintAllGroups()
         {
-            var groupedItems = Items
-                .OrderBy(i => i.GroupName, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-
-            if (groupedItems.Count == 0)
-            {
-                _ui.ShowMessage("In hóa đơn theo nhóm", "Không có nhóm nào để xuất.");
-                return;
-            }
-
-            var confirm = _ui.Confirm(
-                "In hóa đơn theo nhóm",
-                $"Sẽ xuất {groupedItems.Count} hóa đơn (mỗi nhóm 1 hóa đơn gộp). Tiếp tục?");
-            if (!confirm)
-            {
-                return;
-            }
-
-            var folderPath = _ui.ShowFolderPickerDialog("Chọn thư mục để lưu hóa đơn theo nhóm");
-            if (string.IsNullOrWhiteSpace(folderPath))
-            {
-                return;
-            }
-
             try
             {
+                var groupedItems = Items
+                    .OrderBy(i => i.GroupName, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+
+                if (groupedItems.Count == 0)
+                {
+                    _ui.ShowMessage("In hóa đơn theo nhóm", "Không có nhóm nào để xuất.");
+                    return;
+                }
+
+                var confirm = _ui.Confirm(
+                    "In hóa đơn theo nhóm",
+                    $"Sẽ xuất {groupedItems.Count} hóa đơn (mỗi nhóm 1 hóa đơn gộp). Tiếp tục?");
+                if (!confirm)
+                {
+                    return;
+                }
+
+                var folderPath = _ui.ShowFolderPickerDialog("Chọn thư mục để lưu hóa đơn theo nhóm");
+                if (string.IsNullOrWhiteSpace(folderPath))
+                {
+                    return;
+                }
+
                 Directory.CreateDirectory(folderPath);
                 var templatePath = _ui.GetLegacySummaryTemplatePath();
                 var usedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -310,6 +328,7 @@ namespace ElectricCalculation.ViewModels
                 {
                     var groupName = string.IsNullOrWhiteSpace(group.GroupName) ? "(Không có nhóm)" : group.GroupName.Trim();
                     var customers = GetCustomersForGroup(group)
+                        .Where(c => c != null)
                         .OrderBy(c => c.SequenceNumber)
                         .ToList();
 

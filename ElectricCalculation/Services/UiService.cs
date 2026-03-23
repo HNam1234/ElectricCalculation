@@ -21,7 +21,17 @@ namespace ElectricCalculation.Services
 
         private static Window? GetOwner()
         {
-            return Application.Current?.MainWindow;
+            var app = Application.Current;
+            if (app == null)
+            {
+                return null;
+            }
+
+            var active = app.Windows
+                .OfType<Window>()
+                .FirstOrDefault(w => w.IsActive);
+
+            return active ?? app.MainWindow;
         }
 
         public string? ShowOpenExcelFileDialog()
@@ -437,6 +447,18 @@ namespace ElectricCalculation.Services
             };
 
             return window.ShowDialog() == true ? vm : null;
+        }
+
+        public IReadOnlyList<Customer>? ShowGroupInvoiceSelectionDialog(string groupName, IReadOnlyList<Customer> customers)
+        {
+            var vm = new GroupInvoiceSelectionViewModel(groupName ?? string.Empty, customers ?? Array.Empty<Customer>());
+            var window = new GroupInvoiceSelectionWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            return window.ShowDialog() == true ? vm.GetSelectedCustomers() : null;
         }
 
         private static string GetSolutionRootDirectory()

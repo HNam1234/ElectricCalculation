@@ -1,0 +1,95 @@
+<Window x:Class="ElectricCalculation.Views.GroupInvoiceSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        Title="Chọn hộ cần in"
+        Width="1100"
+        Height="650"
+        MinWidth="900"
+        MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="{Binding GroupName, StringFormat=Nhóm: {0}}"
+                           FontSize="16"
+                           FontWeight="Bold" />
+                <TextBlock Margin="0,4,0,0">
+                    <Run Text="Đã chọn: " />
+                    <Run Text="{Binding SelectedCount, Mode=OneWay}" />
+                    <Run Text="/" />
+                    <Run Text="{Binding TotalCount, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock Text="{Binding ValidationMessage}"
+                           Foreground="#FFB91C1C"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+
+            <TextBlock Grid.Column="1"
+                       VerticalAlignment="Top"
+                       Text="{Binding TotalCount, Mode=OneWay, StringFormat=Tổng hộ: {0}}"
+                       Margin="10,2,0,0" />
+        </Grid>
+
+        <DataGrid Grid.Row="1"
+                  ItemsSource="{Binding Items}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  IsReadOnly="False"
+                  SelectionMode="Extended"
+                  HeadersVisibility="Column"
+                  GridLinesVisibility="All">
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="In"
+                                        Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="55" />
+                <DataGridTextColumn Header="STT" Binding="{Binding SequenceNumber, Mode=OneWay}" IsReadOnly="True" Width="55" />
+                <DataGridTextColumn Header="Tên khách" Binding="{Binding Name, Mode=OneWay}" IsReadOnly="True" Width="2*" />
+                <DataGridTextColumn Header="Công tơ" Binding="{Binding MeterNumber, Mode=OneWay}" IsReadOnly="True" Width="*" />
+                <DataGridTextColumn Header="Vị trí" Binding="{Binding Location, Mode=OneWay}" IsReadOnly="True" Width="*" />
+                <DataGridTextColumn Header="Địa chỉ" Binding="{Binding Address, Mode=OneWay}" IsReadOnly="True" Width="2*" />
+                <DataGridTextColumn Header="SĐT hộ" Binding="{Binding HouseholdPhone, Mode=OneWay}" IsReadOnly="True" Width="*" />
+                <DataGridTextColumn Header="SĐT" Binding="{Binding Phone, Mode=OneWay}" IsReadOnly="True" Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <DockPanel Grid.Row="2"
+                   Margin="0,10,0,0"
+                   LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <Button Content="Chọn hết"
+                        Width="90"
+                        Margin="0,0,8,0"
+                        Command="{Binding SelectAllCommand}" />
+                <Button Content="Bỏ chọn"
+                        Width="90"
+                        Command="{Binding ClearAllCommand}" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="OK"
+                        Width="90"
+                        Margin="0,0,8,0"
+                        IsDefault="True"
+                        Command="{Binding OkCommand}" />
+                <Button Content="Hủy"
+                        Width="90"
+                        IsCancel="True"
+                        Command="{Binding CancelCommand}" />
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

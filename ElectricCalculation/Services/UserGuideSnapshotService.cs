@@ -101,7 +101,7 @@ namespace ElectricCalculation.Services
 
             steps.Add(new UserGuideStepItem(
                 StepTitle: "Bước 3: Chọn file Excel chứa data",
-                Description: "Trong ImportWizard, chọn file dữ liệu Excel và chọn đúng sheet dữ liệu.",
+                Description: "Trong ImportWizard, chọn file dữ liệu Excel cần nhập.",
                 Screenshot: wizardFileSelectionScreenshot ?? importFromExcelOptionScreenshot ?? fallbackScreenshot));
 
             steps.Add(new UserGuideStepItem(
@@ -275,356 +275,6 @@ namespace ElectricCalculation.Services
                 UnitPrice = 4169m,
                 SubsidizedKwh = 0m
             };
-        }
-
-        private static bool TryBuildOverviewSection(BitmapSource? startupScreenshot, out UserGuideSectionItem section)
-        {
-            var steps = new List<UserGuideStepItem>();
-
-            if (startupScreenshot != null)
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 1: Chá»n thao tÃ¡c á»Ÿ mÃ n hÃ¬nh Trang chá»§",
-                    Description: "Tá»« Trang chá»§, báº¡n chá»n táº¡o bá»™ dá»¯ liá»‡u má»›i, lÃ m thÃ¡ng má»›i hoáº·c má»Ÿ bá»™ dá»¯ liá»‡u Ä‘Ã£ lÆ°u Ä‘á»ƒ báº¯t Ä‘áº§u lÃ m viá»‡c.",
-                    Screenshot: startupScreenshot));
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var editorScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 2: LÃ m quen mÃ n hÃ¬nh nháº­p chi tiáº¿t",
-                    Description: "ÄÃ¢y lÃ  mÃ n hÃ¬nh chÃ­nh Ä‘á»ƒ nháº­p, sá»­a vÃ  kiá»ƒm tra dá»¯ liá»‡u khÃ¡ch hÃ ng. Báº¡n cÃ³ thá»ƒ chá»‰nh trá»±c tiáº¿p tá»«ng cá»™t trong báº£ng.",
-                    Screenshot: editorScreenshot));
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Search, out var searchScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 3: TÃ¬m kiáº¿m vÃ  lá»c nhanh dá»¯ liá»‡u",
-                    Description: "Nháº­p tá»« khÃ³a vÃ o Ã´ tÃ¬m kiáº¿m, nháº¥n Enter vÃ  káº¿t há»£p cÃ¡c bá»™ lá»c Ä‘á»ƒ táº­p trung vÃ o cÃ¡c dÃ²ng Ä‘ang cáº§n xá»­ lÃ½.",
-                    Screenshot: searchScreenshot));
-            }
-
-            var normalizedSteps = RenumberSteps(steps);
-
-            section = new UserGuideSectionItem(
-                TabTitle: "LÃ m sao Ä‘á»ƒ báº¯t Ä‘áº§u?",
-                Heading: "LÃ m sao Ä‘á»ƒ báº¯t Ä‘áº§u vÃ  lÃ m quen pháº§n má»m?",
-                Description: "Flow cÆ¡ báº£n tá»« Trang chá»§ Ä‘áº¿n mÃ n hÃ¬nh nháº­p liá»‡u chÃ­nh.",
-                Steps: normalizedSteps);
-
-            return normalizedSteps.Count > 0;
-        }
-
-        private static void AddImportGuideSections(
-            ICollection<UserGuideSectionItem> sections,
-            BitmapSource? startupScreenshot)
-        {
-            var sampleExcelPath = GetGuideSampleExcelPath();
-            if (string.IsNullOrWhiteSpace(sampleExcelPath) || !File.Exists(sampleExcelPath))
-            {
-                return;
-            }
-
-            var ui = new UiService();
-
-            if (TryBuildDetailedImportSection(ui, sampleExcelPath, startupScreenshot, out var detailedImportSection))
-            {
-                sections.Add(detailedImportSection);
-            }
-
-            if (TryBuildCurrentIndexImportSection(ui, sampleExcelPath, startupScreenshot, out var currentIndexImportSection))
-            {
-                sections.Add(currentIndexImportSection);
-            }
-        }
-
-        private static bool TryBuildDetailedImportSection(
-            UiService ui,
-            string sampleExcelPath,
-            BitmapSource? startupScreenshot,
-            out UserGuideSectionItem section)
-        {
-            var steps = new List<UserGuideStepItem>();
-
-            if (startupScreenshot != null)
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 1: Má»Ÿ hoáº·c táº¡o bá»™ dá»¯ liá»‡u cáº§n nháº­p",
-                    Description: "Tá»« Trang chá»§, vÃ o bá»™ dá»¯ liá»‡u báº¡n muá»‘n lÃ m viá»‡c trÆ°á»›c khi thá»±c hiá»‡n import Excel chi tiáº¿t.",
-                    Screenshot: startupScreenshot));
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var openImportScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 2: VÃ o Tá»‡p -> Import tá»« Excel",
-                    Description: "Táº¡i mÃ n hÃ¬nh chÃ­nh, chá»n menu Tá»‡p rá»“i báº¥m 'Import tá»« Excel...' Ä‘á»ƒ má»Ÿ form import dá»¯ liá»‡u Ä‘áº§y Ä‘á»§.",
-                    Screenshot: openImportScreenshot));
-            }
-
-            if (TryCaptureImportWizardFullDatasetSteps(ui, sampleExcelPath, out var wizardSteps))
-            {
-                foreach (var step in wizardSteps)
-                {
-                    steps.Add(step);
-                }
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var resultScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 6: Kiá»ƒm tra láº¡i dá»¯ liá»‡u sau khi import",
-                    Description: "Sau khi nháº­p xong, rÃ  láº¡i cÃ¡c cá»™t chá»‰ sá»‘, Ä‘Æ¡n giÃ¡, nhÃ³m vÃ  Ä‘á»‹a chá»‰ ngay trÃªn báº£ng chÃ­nh Ä‘á»ƒ trÃ¡nh thiáº¿u dá»¯ liá»‡u.",
-                    Screenshot: resultScreenshot));
-            }
-
-            var normalizedSteps = RenumberSteps(steps);
-
-            section = new UserGuideSectionItem(
-                TabTitle: "LÃ m sao Ä‘á»ƒ nháº­p tá»« Excel?",
-                Heading: "LÃ m sao Ä‘á»ƒ nháº­p dá»¯ liá»‡u chi tiáº¿t tá»« Excel?",
-                Description: "Flow nháº­p Ä‘áº§y Ä‘á»§ dá»¯ liá»‡u khÃ¡ch hÃ ng vÃ  chá»‰ sá»‘ tá»« file Excel.",
-                Steps: normalizedSteps);
-
-            return normalizedSteps.Count > 0;
-        }
-
-        private static bool TryCaptureImportWizardFullDatasetSteps(
-            UiService ui,
-            string sampleExcelPath,
-            out IReadOnlyList<UserGuideStepItem> steps)
-        {
-            var captured = new List<UserGuideStepItem>();
-            ImportWizardWindow? window = null;
-
-            try
-            {
-                var vm = new ImportWizardViewModel(ui, sampleExcelPath, ImportWizardViewModel.ImportWizardMode.FullDataset);
-                window = new ImportWizardWindow
-                {
-                    DataContext = vm
-                };
-
-                vm.CurrentStep = 0;
-                if (TryCaptureWindowVisual(window, 1180, 780, out var step1Screenshot))
-                {
-                    captured.Add(new UserGuideStepItem(
-                        StepTitle: "BÆ°á»›c 3: Chá»n file, sheet vÃ  dÃ²ng tiÃªu Ä‘á»",
-                        Description:
-                            "Chá»n Ä‘Ãºng file .xlsx, Ä‘Ãºng sheet vÃ  Ä‘Ãºng dÃ²ng tiÃªu Ä‘á» Ä‘á»ƒ há»‡ thá»‘ng Ä‘á»c tÃªn cá»™t chÃ­nh xÃ¡c ngay tá»« Ä‘áº§u.",
-                        Screenshot: step1Screenshot));
-                }
-
-                vm.CurrentStep = 1;
-                if (TryCaptureWindowVisual(window, 1180, 780, out var step2Screenshot))
-                {
-                    captured.Add(new UserGuideStepItem(
-                        StepTitle: "BÆ°á»›c 4: GhÃ©p cá»™t dá»¯ liá»‡u",
-                        Description:
-                            "GhÃ©p tá»«ng cá»™t trong file Excel vá»›i trÆ°á»ng tÆ°Æ¡ng á»©ng trÃªn pháº§n má»m. Báº¯t buá»™c cÃ³ 'TÃªn khÃ¡ch', vÃ  nÃªn map thÃªm Sá»‘ cÃ´ng tÆ¡, Chá»‰ sá»‘ cÅ©, Chá»‰ sá»‘ má»›i, ÄÆ¡n giÃ¡.",
-                        Screenshot: step2Screenshot));
-                }
-
-                vm.CurrentStep = 2;
-                vm.ValidateCommand.Execute(null);
-                if (TryCaptureWindowVisual(window, 1180, 780, out var step3Screenshot))
-                {
-                    captured.Add(new UserGuideStepItem(
-                        StepTitle: "BÆ°á»›c 5: Kiá»ƒm tra lá»—i rá»“i nháº­p dá»¯ liá»‡u",
-                        Description:
-                            "Báº¥m 'Kiá»ƒm tra' Ä‘á»ƒ xem lá»—i vÃ  cáº£nh bÃ¡o. Náº¿u khÃ´ng cÃ²n lá»—i Ä‘á», báº¥m 'Nháº­p dá»¯ liá»‡u' rá»“i hoÃ n táº¥t.",
-                        Screenshot: step3Screenshot));
-                }
-            }
-            catch
-            {
-                // Keep other guide sections available if import capture fails.
-            }
-            finally
-            {
-                try
-                {
-                    window?.Close();
-                }
-                catch
-                {
-                    // Ignore cleanup errors.
-                }
-            }
-
-            steps = captured;
-            return captured.Count > 0;
-        }
-
-        private static bool TryBuildCurrentIndexImportSection(
-            UiService ui,
-            string sampleExcelPath,
-            BitmapSource? startupScreenshot,
-            out UserGuideSectionItem section)
-        {
-            var steps = new List<UserGuideStepItem>();
-
-            if (startupScreenshot != null)
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 1: Má»Ÿ bá»™ dá»¯ liá»‡u thÃ¡ng hiá»‡n táº¡i",
-                    Description: "Tá»« Trang chá»§, má»Ÿ bá»™ dá»¯ liá»‡u cá»§a thÃ¡ng Ä‘ang lÃ m Ä‘á»ƒ chuáº©n bá»‹ cáº­p nháº­t chá»‰ sá»‘ má»›i.",
-                    Screenshot: startupScreenshot));
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var openImportScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 2: Báº¥m Import chá»‰ sá»‘ má»›i",
-                    Description: "Táº¡i mÃ n hÃ¬nh chÃ­nh, dÃ¹ng nÃºt 'Import chá»‰ sá»‘ má»›i' hoáº·c menu Tá»‡p -> Import chá»‰ sá»‘ má»›i tá»« Excel...",
-                    Screenshot: openImportScreenshot));
-            }
-
-            if (TryCaptureImportWizardCurrentIndexSteps(ui, sampleExcelPath, out var wizardSteps))
-            {
-                foreach (var step in wizardSteps)
-                {
-                    steps.Add(step);
-                }
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var resultScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 6: Xem láº¡i cá»™t Chá»‰ sá»‘ má»›i trÃªn báº£ng",
-                    Description: "Sau khi import xong, kiá»ƒm tra láº¡i cÃ¡c dÃ²ng vá»«a cáº­p nháº­t vÃ  lÆ°u Ã½ há»‡ thá»‘ng sáº½ tá»± lÆ°u snapshot thÃ¡ng má»›i.",
-                    Screenshot: resultScreenshot));
-            }
-
-            var normalizedSteps = RenumberSteps(steps);
-
-            section = new UserGuideSectionItem(
-                TabTitle: "LÃ m sao Ä‘á»ƒ nháº­p chá»‰ sá»‘ má»›i?",
-                Heading: "LÃ m sao Ä‘á»ƒ nháº­p chá»‰ sá»‘ má»›i tá»« Excel?",
-                Description: "Flow cáº­p nháº­t má»™t cá»™t chá»‰ sá»‘ má»›i vÃ  ghÃ©p vá»›i dá»¯ liá»‡u hiá»‡n táº¡i.",
-                Steps: normalizedSteps);
-
-            return normalizedSteps.Count > 0;
-        }
-
-        private static bool TryCaptureImportWizardCurrentIndexSteps(
-            UiService ui,
-            string sampleExcelPath,
-            out IReadOnlyList<UserGuideStepItem> steps)
-        {
-            var captured = new List<UserGuideStepItem>();
-            CurrentIndexImportWindow? window = null;
-
-            try
-            {
-                var vm = new ImportWizardViewModel(ui, sampleExcelPath, ImportWizardViewModel.ImportWizardMode.CurrentIndexOneColumn);
-                window = new CurrentIndexImportWindow
-                {
-                    DataContext = vm
-                };
-
-                vm.CurrentStep = 0;
-                if (TryCaptureWindowVisual(window, 1180, 780, out var step1Screenshot))
-                {
-                    captured.Add(new UserGuideStepItem(
-                        StepTitle: "BÆ°á»›c 3: Chá»n file, sheet vÃ  dÃ²ng tiÃªu Ä‘á»",
-                        Description:
-                            "Chá»n file Excel chá»©a chá»‰ sá»‘ má»›i, Ä‘Ãºng sheet vÃ  Ä‘Ãºng dÃ²ng tiÃªu Ä‘á» Ä‘á»ƒ há»‡ thá»‘ng nháº­n biáº¿t cá»™t chÃ­nh xÃ¡c.",
-                        Screenshot: step1Screenshot));
-                }
-
-                vm.CurrentStep = 1;
-                if (TryCaptureWindowVisual(window, 1180, 780, out var step2Screenshot))
-                {
-                    captured.Add(new UserGuideStepItem(
-                        StepTitle: "BÆ°á»›c 4: Chá»n cá»™t Chá»‰ sá»‘ má»›i vÃ  khÃ³a ghÃ©p",
-                        Description:
-                            "Báº¯t buá»™c map 'Chá»‰ sá»‘ má»›i'. Kiá»ƒm tra láº¡i cÃ¡c khÃ³a ghÃ©p nhÆ° Sá»‘ cÃ´ng tÆ¡, Sá»‘ thá»© tá»±, TÃªn khÃ¡ch; há»‡ thá»‘ng cÃ³ tá»± Ä‘oÃ¡n nhÆ°ng báº¡n váº«n cÃ³ thá»ƒ sá»­a tay.",
-                        Screenshot: step2Screenshot));
-                }
-
-                vm.CurrentStep = 2;
-                vm.ValidateCommand.Execute(null);
-                if (TryCaptureWindowVisual(window, 1180, 780, out var step3Screenshot))
-                {
-                    captured.Add(new UserGuideStepItem(
-                        StepTitle: "BÆ°á»›c 5: Kiá»ƒm tra rá»“i nháº­p chá»‰ sá»‘",
-                        Description:
-                            "Báº¥m 'Kiá»ƒm tra' Ä‘á»ƒ rÃ  lá»—i/cáº£nh bÃ¡o, sau Ä‘Ã³ import. Káº¿t quáº£ cáº­p nháº­t sáº½ Ä‘Æ°á»£c ghi láº¡i vÃ  tá»± lÆ°u bá»™ dá»¯ liá»‡u.",
-                        Screenshot: step3Screenshot));
-                }
-            }
-            catch
-            {
-                // Keep other guide sections available if import capture fails.
-            }
-            finally
-            {
-                try
-                {
-                    window?.Close();
-                }
-                catch
-                {
-                    // Ignore cleanup errors.
-                }
-            }
-
-            steps = captured;
-            return captured.Count > 0;
-        }
-
-        private static bool TryBuildFastEntrySection(BitmapSource? startupScreenshot, out UserGuideSectionItem section)
-        {
-            var steps = new List<UserGuideStepItem>();
-
-            if (startupScreenshot != null)
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 1: Má»Ÿ bá»™ dá»¯ liá»‡u cáº§n nháº­p nhanh",
-                    Description: "Báº¯t Ä‘áº§u tá»« Trang chá»§ vÃ  má»Ÿ bá»™ dá»¯ liá»‡u cá»§a thÃ¡ng Ä‘ang lÃ m Ä‘á»ƒ chuyá»ƒn sang cháº¿ Ä‘á»™ nháº­p nhanh.",
-                    Screenshot: startupScreenshot));
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var detailScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 2: VÃ o mÃ n hÃ¬nh nháº­p chi tiáº¿t",
-                    Description: "Táº¡i mÃ n hÃ¬nh chÃ­nh, kiá»ƒm tra Ä‘Ãºng ká»³ tÃ­nh vÃ  dá»¯ liá»‡u khÃ¡ch trÆ°á»›c khi chuyá»ƒn sang cháº¿ Ä‘á»™ nháº­p nhanh.",
-                    Screenshot: detailScreenshot));
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.FastEntry, out var fastEntryScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 3: Báº­t cháº¿ Ä‘á»™ Nháº­p nhanh",
-                    Description: "Gáº¡t nÃºt cháº¿ Ä‘á»™ sang 'Nháº­p nhanh'. Khi Ä‘Ã³ báº£ng sáº½ táº­p trung thao tÃ¡c vÃ o cá»™t 'Chá»‰ sá»‘ má»›i'.",
-                    Screenshot: fastEntryScreenshot));
-
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 4: Nháº­p chá»‰ sá»‘ má»›i liÃªn tá»¥c",
-                    Description: "Chá»‰ nháº­p á»Ÿ cá»™t 'Chá»‰ sá»‘ má»›i', nháº¥n Enter Ä‘á»ƒ nháº£y xuá»‘ng dÃ²ng tiáº¿p theo. DÃ¹ng bá»™ lá»c 'Thiáº¿u', 'Cáº£nh bÃ¡o', 'Lá»—i' Ä‘á»ƒ rÃ  nhanh.",
-                    Screenshot: fastEntryScreenshot));
-            }
-
-            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var backToDetailScreenshot))
-            {
-                steps.Add(new UserGuideStepItem(
-                    StepTitle: "BÆ°á»›c 5: Quay láº¡i Chi tiáº¿t khi cáº§n sá»­a sÃ¢u",
-                    Description: "Sau khi nháº­p nhanh xong, chuyá»ƒn láº¡i 'Chi tiáº¿t' Ä‘á»ƒ sá»­a cÃ¡c cá»™t khÃ¡c nhÆ° nhÃ³m, Ä‘á»‹a chá»‰, TBA hoáº·c sá»‘ cÃ´ng tÆ¡.",
-                    Screenshot: backToDetailScreenshot));
-            }
-
-            var normalizedSteps = RenumberSteps(steps);
-
-            section = new UserGuideSectionItem(
-                TabTitle: "LÃ m sao Ä‘á»ƒ nháº­p nhanh?",
-                Heading: "LÃ m sao Ä‘á»ƒ nháº­p nhanh chá»‰ sá»‘ trÃªn mÃ n hÃ¬nh chÃ­nh?",
-                Description: "Flow thao tÃ¡c trá»±c tiáº¿p trÃªn báº£ng Ä‘á»ƒ cáº­p nháº­t chá»‰ sá»‘ nhanh theo tá»«ng dÃ²ng.",
-                Steps: normalizedSteps);
-
-            return normalizedSteps.Count > 0;
         }
 
         private static bool TryCaptureStartupWindow(Window? startupWindow, out BitmapSource screenshot)
@@ -860,38 +510,6 @@ namespace ElectricCalculation.Services
             return !double.IsNaN(value) && !double.IsInfinity(value) && value > 1;
         }
 
-        private static IReadOnlyList<UserGuideStepItem> RenumberSteps(IEnumerable<UserGuideStepItem> steps)
-        {
-            var result = new List<UserGuideStepItem>();
-            var stepNumber = 1;
-
-            foreach (var step in steps)
-            {
-                var title = step.StepTitle ?? string.Empty;
-                if (title.StartsWith("BÆ°á»›c ", StringComparison.OrdinalIgnoreCase))
-                {
-                    var colonIndex = title.IndexOf(':');
-                    if (colonIndex >= 0 && colonIndex < title.Length - 1)
-                    {
-                        title = $"BÆ°á»›c {stepNumber}:{title[(colonIndex + 1)..]}";
-                    }
-                    else
-                    {
-                        title = $"BÆ°á»›c {stepNumber}: {title}";
-                    }
-                }
-                else
-                {
-                    title = $"BÆ°á»›c {stepNumber}: {title}";
-                }
-
-                result.Add(step with { StepTitle = title });
-                stepNumber++;
-            }
-
-            return result;
-        }
-
         private enum MainWindowGuideCaptureMode
         {
             Detail,
@@ -901,18 +519,18 @@ namespace ElectricCalculation.Services
 
         private static void PopulateDemoCustomers(MainWindowViewModel vm)
         {
-            vm.PeriodLabel = $"ThÃ¡ng {DateTime.Now.Month:00}/{DateTime.Now.Year}";
-            vm.InvoiceIssuer = "Nguyá»…n VÄƒn A";
+            vm.PeriodLabel = $"Tháng {DateTime.Now.Month:00}/{DateTime.Now.Year}";
+            vm.InvoiceIssuer = "Nguyễn Văn A";
 
             vm.Customers.Clear();
 
             vm.Customers.Add(new Customer
             {
                 SequenceNumber = 1,
-                Name = "PhÃ²ng A101",
+                Name = "Phòng A101",
                 GroupName = "Khu A",
-                Category = "Sinh hoáº¡t",
-                Address = "TÃ²a A - Táº§ng 1",
+                Category = "Sinh hoạt",
+                Address = "Tòa A - Tầng 1",
                 MeterNumber = "CT-A101",
                 Location = "A1",
                 PreviousIndex = 1250m,
@@ -924,10 +542,10 @@ namespace ElectricCalculation.Services
             vm.Customers.Add(new Customer
             {
                 SequenceNumber = 2,
-                Name = "PhÃ²ng A102",
+                Name = "Phòng A102",
                 GroupName = "Khu A",
-                Category = "Sinh hoáº¡t",
-                Address = "TÃ²a A - Táº§ng 1",
+                Category = "Sinh hoạt",
+                Address = "Tòa A - Tầng 1",
                 MeterNumber = "CT-A102",
                 Location = "A1",
                 PreviousIndex = 980m,
@@ -939,10 +557,10 @@ namespace ElectricCalculation.Services
             vm.Customers.Add(new Customer
             {
                 SequenceNumber = 3,
-                Name = "PhÃ²ng B201",
+                Name = "Phòng B201",
                 GroupName = "Khu B",
-                Category = "Dá»‹ch vá»¥",
-                Address = "TÃ²a B - Táº§ng 2",
+                Category = "Dịch vụ",
+                Address = "Tòa B - Tầng 2",
                 MeterNumber = "CT-B201",
                 Location = "B2",
                 PreviousIndex = 2010m,
@@ -954,10 +572,10 @@ namespace ElectricCalculation.Services
             vm.Customers.Add(new Customer
             {
                 SequenceNumber = 4,
-                Name = "PhÃ²ng B202",
+                Name = "Phòng B202",
                 GroupName = "Khu B",
-                Category = "Dá»‹ch vá»¥",
-                Address = "TÃ²a B - Táº§ng 2",
+                Category = "Dịch vụ",
+                Address = "Tòa B - Tầng 2",
                 MeterNumber = "CT-B202",
                 Location = "B2",
                 PreviousIndex = 1540m,
