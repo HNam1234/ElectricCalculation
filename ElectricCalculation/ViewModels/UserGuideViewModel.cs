@@ -31,6 +31,11 @@ namespace ElectricCalculation.ViewModels
         public string GeneratedAtText { get; }
 
         public UserGuideViewModel(IEnumerable<UserGuideSectionItem> sections)
+            : this(sections, DateTime.Now)
+        {
+        }
+
+        public UserGuideViewModel(IEnumerable<UserGuideSectionItem> sections, DateTime generatedAt)
         {
             foreach (var section in sections)
             {
@@ -38,7 +43,7 @@ namespace ElectricCalculation.ViewModels
             }
 
             SelectedSection = Sections.Count > 0 ? Sections[0] : null;
-            GeneratedAtText = $"Hướng dẫn được tạo lúc: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
+            GeneratedAtText = $"Hướng dẫn được tạo lúc: {generatedAt:dd/MM/yyyy HH:mm:ss}";
         }
 
         [RelayCommand]

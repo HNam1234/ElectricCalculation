@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Threading;
+using ElectricCalculation.Services;
 
 namespace ElectricCalculation.Views
 {
@@ -7,6 +9,13 @@ namespace ElectricCalculation.Views
         public StartupWindow()
         {
             InitializeComponent();
+            ContentRendered += OnContentRendered;
+        }
+
+        private void OnContentRendered(object? sender, System.EventArgs e)
+        {
+            ContentRendered -= OnContentRendered;
+            Dispatcher.BeginInvoke(() => new UiService().PreloadUserGuide(this), DispatcherPriority.ApplicationIdle);
         }
     }
 }

@@ -19,6 +19,49 @@ namespace ElectricCalculation.Services
         private const string PackagedSummaryTemplateRelativePath = @"SampleData\Bang_tong_hop_thu_thang_06_2025.xlsx";
         private const string LegacySummaryTemplateFileName = "Bảng tổng hợp thu tháng 6 năm 2025.xlsx";
 
+        private static readonly object UserGuideLock = new();
+        private static IReadOnlyList<UserGuideSectionItem>? CachedUserGuideSections;
+        private static DateTime CachedUserGuideGeneratedAt;
+
+        public void PreloadUserGuide(Window? owner = null)
+        {
+            owner ??= GetOwner();
+            if (owner == null)
+            {
+                return;
+            }
+
+            lock (UserGuideLock)
+            {
+                if (CachedUserGuideSections != null && CachedUserGuideSections.Count > 0)
+                {
+                    return;
+                }
+            }
+
+            try
+            {
+                var sections = UserGuideSnapshotService.BuildGuideSections(owner);
+                if (sections.Count == 0)
+                {
+                    return;
+                }
+
+                lock (UserGuideLock)
+                {
+                    if (CachedUserGuideSections == null || CachedUserGuideSections.Count == 0)
+                    {
+                        CachedUserGuideSections = sections;
+                        CachedUserGuideGeneratedAt = DateTime.Now;
+                    }
+                }
+            }
+            catch
+            {
+                // Best-effort preload.
+            }
+        }
+
         private static Window? GetOwner()
         {
             var app = Application.Current;
@@ -241,13 +284,30 @@ namespace ElectricCalculation.Services
         public void ShowUserGuideDialog()
         {
             var owner = GetOwner();
-            var sections = UserGuideSnapshotService.BuildGuideSections(owner);
+            IReadOnlyList<UserGuideSectionItem> sections;
+            DateTime generatedAt;
+
+            lock (UserGuideLock)
+            {
+                if (CachedUserGuideSections != null && CachedUserGuideSections.Count > 0)
+                {
+                    sections = CachedUserGuideSections;
+                    generatedAt = CachedUserGuideGeneratedAt;
+                }
+                else
+                {
+                    sections = UserGuideSnapshotService.BuildGuideSections(owner);
+                    CachedUserGuideSections = sections;
+                    CachedUserGuideGeneratedAt = DateTime.Now;
+                    generatedAt = CachedUserGuideGeneratedAt;
+                }
+            }
             if (sections.Count == 0)
             {
                 throw new WarningException("Không thể tạo ảnh hướng dẫn. Hãy thử mở lại hướng dẫn sau.");
             }
 
-            var vm = new UserGuideViewModel(sections);
+            var vm = new UserGuideViewModel(sections, generatedAt);
             var dialog = new UserGuideWindow
             {
                 Owner = owner,
@@ -449,16 +509,28 @@ namespace ElectricCalculation.Services
             return window.ShowDialog() == true ? vm : null;
         }
 
-        public IReadOnlyList<Customer>? ShowGroupInvoiceSelectionDialog(string groupName, IReadOnlyList<Customer> customers)
+        public GroupInvoiceSelectionResult? ShowGroupInvoiceSelectionDialog(
+            string groupName,
+            IReadOnlyList<Customer> customers,
+            string? defaultPeriodLabel = null,
+            string? defaultIssuerName = null,
+            string? defaultIssuePlace = null,
+            DateTime? defaultIssueDate = null)
         {
-            var vm = new GroupInvoiceSelectionViewModel(groupName ?? string.Empty, customers ?? Array.Empty<Customer>());
+            var vm = new GroupInvoiceSelectionViewModel(
+                groupName ?? string.Empty,
+                customers ?? Array.Empty<Customer>(),
+                defaultPeriodLabel,
+                defaultIssuerName,
+                defaultIssuePlace,
+                defaultIssueDate);
             var window = new GroupInvoiceSelectionWindow
             {
                 Owner = GetOwner(),
                 DataContext = vm
             };
 
-            return window.ShowDialog() == true ? vm.GetSelectedCustomers() : null;
+            return window.ShowDialog() == true ? vm.GetResult() : null;
         }
 
         private static string GetSolutionRootDirectory()

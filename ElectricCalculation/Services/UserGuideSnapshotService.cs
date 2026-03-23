@@ -1,9 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Interop;
+using System.Windows.Threading;
 using ElectricCalculation.Models;
 using ElectricCalculation.ViewModels;
 using ElectricCalculation.Views;
@@ -12,6 +18,10 @@ namespace ElectricCalculation.Services
 {
     internal static class UserGuideSnapshotService
     {
+        private const string ReportMenuGuideImageFileName = "report_menu.png";
+        private const string ReportGroupGuideImageFileName = "report_group.png";
+        private const string GroupInvoiceSelectionGuideImageFileName = "group_invoice_selection.png";
+
         public static IReadOnlyList<UserGuideSectionItem> BuildGuideSections(Window? startupWindow)
         {
             var sections = new List<UserGuideSectionItem>();
@@ -20,7 +30,454 @@ namespace ElectricCalculation.Services
                 sections.Add(basicFlowSection);
             }
 
+            if (TryBuildGroupInvoiceFlowSection(out var groupInvoiceSection))
+            {
+                sections.Add(groupInvoiceSection);
+            }
+
             return sections;
+        }
+
+        private static bool TryBuildGroupInvoiceFlowSection(out UserGuideSectionItem section)
+        {
+            var steps = new List<UserGuideStepItem>();
+
+            BitmapSource? reportMenuScreenshot = null;
+            if (TryLoadUserGuideImage(ReportMenuGuideImageFileName, out var loadedMenuScreenshot))
+            {
+                reportMenuScreenshot = loadedMenuScreenshot;
+            }
+            else if (TryCaptureReportMenuOnMainWindow(out var capturedMenuScreenshot))
+            {
+                reportMenuScreenshot = capturedMenuScreenshot;
+            }
+
+            BitmapSource? mainDetailScreenshot = null;
+            if (TryCaptureMainWindowWithSampleData(MainWindowGuideCaptureMode.Detail, out var capturedDetailScreenshot))
+            {
+                mainDetailScreenshot = capturedDetailScreenshot;
+            }
+
+            BitmapSource? reportScreenshot = null;
+            if (TryCaptureOpenReportWindow(out var openReportScreenshot))
+            {
+                reportScreenshot = openReportScreenshot;
+            }
+            else if (TryLoadUserGuideImage(ReportGroupGuideImageFileName, out var loadedReport))
+            {
+                reportScreenshot = loadedReport;
+            }
+            else if (TryCaptureReportWindowWithSampleData(out var capturedReportScreenshot))
+            {
+                reportScreenshot = capturedReportScreenshot;
+            }
+
+            BitmapSource? selectionScreenshot = null;
+            if (TryCaptureOpenGroupInvoiceSelectionWindow(out var openSelectionScreenshot))
+            {
+                selectionScreenshot = openSelectionScreenshot;
+            }
+            else if (TryLoadUserGuideImage(GroupInvoiceSelectionGuideImageFileName, out var loadedSelection))
+            {
+                selectionScreenshot = loadedSelection;
+            }
+            else if (TryCaptureGroupInvoiceSelectionWindowWithSampleData(out var capturedSelectionScreenshot))
+            {
+                selectionScreenshot = capturedSelectionScreenshot;
+            }
+
+            var fallbackScreenshot =
+                reportScreenshot ??
+                selectionScreenshot ??
+                mainDetailScreenshot;
+
+            if (fallbackScreenshot == null)
+            {
+                section = new UserGuideSectionItem(
+                    TabTitle: "In nhóm",
+                    Heading: "In hóa đơn theo nhóm",
+                    Description: "Không thể chụp ảnh hướng dẫn trong phiên hiện tại.",
+                    Steps: Array.Empty<UserGuideStepItem>());
+                return false;
+            }
+
+            steps.Add(new UserGuideStepItem(
+                StepTitle: "Bước 1: Mở báo cáo theo nhóm",
+                Description: "Vào menu Báo cáo → Thống kê theo nhóm… để mở màn hình thống kê.",
+                Screenshot: reportMenuScreenshot ?? reportScreenshot ?? selectionScreenshot ?? mainDetailScreenshot ?? fallbackScreenshot));
+
+            steps.Add(new UserGuideStepItem(
+                StepTitle: "Bước 2: Chọn nhóm cần in",
+                Description: "Trong màn hình thống kê, chọn nhóm/đơn vị rồi bấm In hóa đơn nhóm.",
+                Screenshot: reportScreenshot ?? selectionScreenshot ?? mainDetailScreenshot ?? fallbackScreenshot));
+
+            steps.Add(new UserGuideStepItem(
+                StepTitle: "Bước 3: Chọn hộ và xem trước",
+                Description: "Tick/bỏ tick các hộ cần in. Giữ Ctrl + chuột trái để bôi đen nhiều dòng, sau đó chuột phải để Chọn in/Bỏ in nhanh. Nếu muốn custom header, bỏ chọn 'Tự động lấy thông tin (Kính gửi/Địa chỉ/Đại diện/Điện thoại)' rồi nhập tay và xem trước trực tiếp bên phải.",
+                Screenshot: selectionScreenshot ?? reportScreenshot ?? fallbackScreenshot));
+
+            steps.Add(new UserGuideStepItem(
+                StepTitle: "Bước 4: Xuất file Excel",
+                Description: "Bấm OK → xác nhận → chọn nơi lưu. Hệ thống sẽ tạo file .xlsx gồm 1 sheet hóa đơn gộp cho nhóm.",
+                Screenshot: selectionScreenshot ?? reportScreenshot ?? fallbackScreenshot));
+
+            section = new UserGuideSectionItem(
+                TabTitle: "In nhóm",
+                Heading: "In hóa đơn theo nhóm",
+                Description: "4 bước: mở thống kê theo nhóm, chọn nhóm, chọn hộ + tuỳ biến + xem trước, và xuất file Excel.",
+                Steps: steps);
+
+            return true;
+        }
+
+        private static bool TryLoadUserGuideImage(string fileName, out BitmapSource screenshot)
+        {
+            screenshot = null!;
+
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return false;
+            }
+
+            try
+            {
+                var cachePath = Path.Combine(GetUserGuideImageCacheDirectory(), fileName);
+                var baseDirPath = Path.Combine(AppContext.BaseDirectory, "Assets", "UserGuide", fileName);
+
+                var path = File.Exists(cachePath) ? cachePath : baseDirPath;
+                if (!File.Exists(path))
+                {
+                    return false;
+                }
+
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.UriSource = new Uri(path, UriKind.Absolute);
+                image.EndInit();
+                image.Freeze();
+
+                screenshot = image;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetUserGuideImageCacheDirectory()
+        {
+            var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            return Path.Combine(documents, "ElectricCalculation", "UserGuide");
+        }
+
+        private static void TrySaveUserGuideImage(string fileName, BitmapSource screenshot)
+        {
+            if (string.IsNullOrWhiteSpace(fileName) || screenshot == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var folder = GetUserGuideImageCacheDirectory();
+                Directory.CreateDirectory(folder);
+                var path = Path.Combine(folder, fileName);
+
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(screenshot));
+
+                using var stream = File.Create(path);
+                encoder.Save(stream);
+            }
+            catch
+            {
+                // Best-effort cache.
+            }
+        }
+
+        private static bool TryCaptureReportMenuOnMainWindow(out BitmapSource screenshot)
+        {
+            screenshot = null!;
+
+            var app = Application.Current;
+            if (app == null)
+            {
+                return false;
+            }
+
+            var window = app.Windows
+                .OfType<MainWindow>()
+                .FirstOrDefault(w => w.IsVisible && w.WindowState != WindowState.Minimized)
+                ?? app.Windows.OfType<MainWindow>().FirstOrDefault()
+                ?? app.MainWindow as MainWindow;
+
+            if (window == null)
+            {
+                return false;
+            }
+
+            MenuItem? reportMenu = null;
+
+            try
+            {
+                window.Dispatcher.Invoke(() =>
+                {
+                    window.Activate();
+                    reportMenu = window.FindName("ReportMenuItem") as MenuItem;
+                    if (reportMenu != null)
+                    {
+                        reportMenu.IsSubmenuOpen = true;
+                        reportMenu.UpdateLayout();
+                    }
+                }, DispatcherPriority.Normal);
+
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Thread.Sleep(80);
+
+                if (!TryCaptureWindowFromScreen(window, out screenshot))
+                {
+                    screenshot = CaptureWindowVisual(window, fallbackWidth: 1200, fallbackHeight: 700);
+                }
+
+                TrySaveUserGuideImage(ReportMenuGuideImageFileName, screenshot);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try
+                {
+                    if (reportMenu != null)
+                    {
+                        window.Dispatcher.Invoke(() => reportMenu.IsSubmenuOpen = false, DispatcherPriority.Normal);
+                    }
+                }
+                catch
+                {
+                    // Best-effort cleanup.
+                }
+            }
+        }
+
+        private static bool TryCaptureOpenReportWindow(out BitmapSource screenshot)
+        {
+            screenshot = null!;
+
+            var app = Application.Current;
+            if (app == null)
+            {
+                return false;
+            }
+
+            var window = app.Windows
+                .OfType<ReportWindow>()
+                .FirstOrDefault(w => w.IsVisible && w.WindowState != WindowState.Minimized)
+                ?? app.Windows.OfType<ReportWindow>().FirstOrDefault();
+
+            if (window == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                window.Activate();
+
+                if (!TryCaptureWindowFromScreen(window, out screenshot))
+                {
+                    screenshot = CaptureWindowVisual(window, fallbackWidth: 1000, fallbackHeight: 540);
+                }
+
+                TrySaveUserGuideImage(ReportGroupGuideImageFileName, screenshot);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryCaptureOpenGroupInvoiceSelectionWindow(out BitmapSource screenshot)
+        {
+            screenshot = null!;
+
+            var app = Application.Current;
+            if (app == null)
+            {
+                return false;
+            }
+
+            var window = app.Windows
+                .OfType<GroupInvoiceSelectionWindow>()
+                .FirstOrDefault(w => w.IsVisible && w.WindowState != WindowState.Minimized)
+                ?? app.Windows.OfType<GroupInvoiceSelectionWindow>().FirstOrDefault();
+
+            if (window == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                window.Activate();
+
+                if (!TryCaptureWindowFromScreen(window, out screenshot))
+                {
+                    screenshot = CaptureWindowVisual(window, fallbackWidth: 1100, fallbackHeight: 650);
+                }
+
+                TrySaveUserGuideImage(GroupInvoiceSelectionGuideImageFileName, screenshot);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeRect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rect);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetDC(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDc);
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr CreateCompatibleDC(IntPtr hDc);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteDC(IntPtr hDc);
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr CreateCompatibleBitmap(IntPtr hDc, int nWidth, int nHeight);
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr SelectObject(IntPtr hDc, IntPtr hObject);
+
+        [DllImport("gdi32.dll", SetLastError = true)]
+        private static extern bool BitBlt(
+            IntPtr hdcDest,
+            int nXDest,
+            int nYDest,
+            int nWidth,
+            int nHeight,
+            IntPtr hdcSrc,
+            int nXSrc,
+            int nYSrc,
+            int dwRop);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
+
+        private static bool TryCaptureWindowFromScreen(Window window, out BitmapSource screenshot)
+        {
+            screenshot = null!;
+
+            var handle = new WindowInteropHelper(window).Handle;
+            if (handle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            if (!GetWindowRect(handle, out var rect))
+            {
+                return false;
+            }
+
+            var width = rect.Right - rect.Left;
+            var height = rect.Bottom - rect.Top;
+            if (width <= 0 || height <= 0)
+            {
+                return false;
+            }
+
+            IntPtr screenDc = IntPtr.Zero;
+            IntPtr memoryDc = IntPtr.Zero;
+            IntPtr hBitmap = IntPtr.Zero;
+            IntPtr oldObject = IntPtr.Zero;
+
+            try
+            {
+                const int SRCCOPY = 0x00CC0020;
+                const int CAPTUREBLT = 0x40000000;
+
+                screenDc = GetDC(IntPtr.Zero);
+                if (screenDc == IntPtr.Zero)
+                {
+                    return false;
+                }
+
+                memoryDc = CreateCompatibleDC(screenDc);
+                if (memoryDc == IntPtr.Zero)
+                {
+                    return false;
+                }
+
+                hBitmap = CreateCompatibleBitmap(screenDc, width, height);
+                if (hBitmap == IntPtr.Zero)
+                {
+                    return false;
+                }
+
+                oldObject = SelectObject(memoryDc, hBitmap);
+                if (oldObject == IntPtr.Zero)
+                {
+                    return false;
+                }
+
+                if (!BitBlt(memoryDc, 0, 0, width, height, screenDc, rect.Left, rect.Top, SRCCOPY | CAPTUREBLT))
+                {
+                    return false;
+                }
+
+                var source = Imaging.CreateBitmapSourceFromHBitmap(
+                    hBitmap,
+                    IntPtr.Zero,
+                    Int32Rect.Empty,
+                    BitmapSizeOptions.FromEmptyOptions());
+
+                source.Freeze();
+                screenshot = source;
+                return true;
+            }
+            finally
+            {
+                if (oldObject != IntPtr.Zero && memoryDc != IntPtr.Zero)
+                {
+                    SelectObject(memoryDc, oldObject);
+                }
+
+                if (hBitmap != IntPtr.Zero)
+                {
+                    DeleteObject(hBitmap);
+                }
+
+                if (memoryDc != IntPtr.Zero)
+                {
+                    DeleteDC(memoryDc);
+                }
+
+                if (screenDc != IntPtr.Zero)
+                {
+                    ReleaseDC(IntPtr.Zero, screenDc);
+                }
+            }
         }
 
         private static bool TryBuildSingleBasicFlowSection(Window? startupWindow, out UserGuideSectionItem section)
@@ -251,6 +708,166 @@ namespace ElectricCalculation.Services
                     // Ignore cleanup errors.
                 }
             }
+        }
+
+        private static bool TryCaptureReportWindowWithSampleData(out BitmapSource screenshot)
+        {
+            screenshot = null!;
+
+            var customers = BuildGuideReportCustomers();
+            if (customers.Count == 0)
+            {
+                return false;
+            }
+
+            var window = new ReportWindow
+            {
+                DataContext = new ReportViewModel(
+                    periodLabel: $"Tháng {DateTime.Now:MM/yyyy}",
+                    customers: customers,
+                    issuerName: "Nguyễn Văn A",
+                    ui: new UiService())
+            };
+
+            try
+            {
+                screenshot = CaptureWindowVisual(window, fallbackWidth: 1000, fallbackHeight: 540);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try
+                {
+                    window.Close();
+                }
+                catch
+                {
+                    // Ignore cleanup errors.
+                }
+            }
+        }
+
+        private static bool TryCaptureGroupInvoiceSelectionWindowWithSampleData(out BitmapSource screenshot)
+        {
+            screenshot = null!;
+
+            var customers = BuildGuideReportCustomers()
+                .Where(c => string.Equals(c.GroupName, "Khu A", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (customers.Count == 0)
+            {
+                return false;
+            }
+
+            var vm = new GroupInvoiceSelectionViewModel(
+                groupName: "Khu A",
+                customers: customers,
+                periodLabel: $"Tháng {DateTime.Now:MM/yyyy}",
+                issuerName: "Nguyễn Văn A",
+                issuePlace: "Hà Nội",
+                issueDate: DateTime.Today)
+            {
+                UseAutoHeaderFields = false,
+                RecipientName = "Khu A (Custom)",
+                ConsumptionAddress = "Tòa A - Tầng 1",
+                RepresentativeName = "Ban quản lý Khu A",
+                HouseholdPhone = "0243 123 4567",
+                RepresentativePhone = "0906 123 357"
+            };
+
+            var window = new GroupInvoiceSelectionWindow
+            {
+                DataContext = vm
+            };
+
+            try
+            {
+                screenshot = CaptureWindowVisual(window, fallbackWidth: 1100, fallbackHeight: 650);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try
+                {
+                    window.Close();
+                }
+                catch
+                {
+                    // Ignore cleanup errors.
+                }
+            }
+        }
+
+        private static List<Customer> BuildGuideReportCustomers()
+        {
+            return new List<Customer>
+            {
+                new Customer
+                {
+                    SequenceNumber = 1,
+                    Name = "Phòng A101",
+                    GroupName = "Khu A",
+                    Category = "Sinh hoạt",
+                    Address = "Tòa A - Tầng 1",
+                    MeterNumber = "CT-A101",
+                    Location = "A1",
+                    PreviousIndex = 1250m,
+                    CurrentIndex = 1288m,
+                    Multiplier = 1m,
+                    UnitPrice = 3505m
+                },
+                new Customer
+                {
+                    SequenceNumber = 2,
+                    Name = "Phòng A102",
+                    GroupName = "Khu A",
+                    Category = "Sinh hoạt",
+                    Address = "Tòa A - Tầng 1",
+                    MeterNumber = "CT-A102",
+                    Location = "A1",
+                    PreviousIndex = 980m,
+                    CurrentIndex = 1032m,
+                    Multiplier = 1m,
+                    UnitPrice = 3505m
+                },
+                new Customer
+                {
+                    SequenceNumber = 3,
+                    Name = "Phòng B201",
+                    GroupName = "Khu B",
+                    Category = "Dịch vụ",
+                    Address = "Tòa B - Tầng 2",
+                    MeterNumber = "CT-B201",
+                    Location = "B2",
+                    PreviousIndex = 2010m,
+                    CurrentIndex = 2080m,
+                    Multiplier = 1m,
+                    UnitPrice = 4169m
+                },
+                new Customer
+                {
+                    SequenceNumber = 4,
+                    Name = "Phòng B202",
+                    GroupName = "Khu B",
+                    Category = "Dịch vụ",
+                    Address = "Tòa B - Tầng 2",
+                    MeterNumber = "CT-B202",
+                    Location = "B2",
+                    PreviousIndex = 1540m,
+                    CurrentIndex = 1615m,
+                    Multiplier = 1m,
+                    UnitPrice = 4169m
+                }
+            };
         }
 
         private static Customer BuildGuideInvoiceCustomer()

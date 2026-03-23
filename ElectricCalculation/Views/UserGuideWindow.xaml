@@ -201,11 +201,16 @@
         </TabControl>
 
         <DockPanel Grid.Row="2" Margin="0,12,0,0">
-            <TextBlock DockPanel.Dock="Left"
-                       VerticalAlignment="Center"
-                       Text="{Binding GeneratedAtText}"
-                       Foreground="#FF6B7280"
-                       FontSize="12" />
+            <StackPanel DockPanel.Dock="Left"
+                        VerticalAlignment="Center">
+                <TextBlock Text="{Binding GeneratedAtText}"
+                           Foreground="#FF6B7280"
+                           FontSize="12" />
+                <TextBlock Text="Tác giả: GitHub: HNam190500@gmail.com | Gmail: myfavblueone@gmail.com"
+                           Margin="0,2,0,0"
+                           Foreground="#FF6B7280"
+                           FontSize="12" />
+            </StackPanel>
             <Button DockPanel.Dock="Right"
                     Width="120"
                     Height="34"

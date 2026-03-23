@@ -230,13 +230,13 @@ namespace ElectricCalculation.ViewModels
 
                 var groupName = string.IsNullOrWhiteSpace(item.GroupName) ? "(Không có nhóm)" : item.GroupName.Trim();
 
-                var selectedCustomers = _ui.ShowGroupInvoiceSelectionDialog(groupName, customers);
-                if (selectedCustomers == null)
+                var selection = _ui.ShowGroupInvoiceSelectionDialog(groupName, customers, _periodLabel, _issuerName);
+                if (selection == null)
                 {
                     return;
                 }
 
-                customers = selectedCustomers
+                customers = selection.SelectedCustomers
                     .OrderBy(c => c.SequenceNumber)
                     .ToList();
 
@@ -271,8 +271,15 @@ namespace ElectricCalculation.ViewModels
                     outputPath,
                     groupName,
                     customers,
-                    _periodLabel,
-                    _issuerName);
+                    selection.PeriodLabel,
+                    selection.IssuerName,
+                    issuePlace: selection.IssuePlace,
+                    issueDate: selection.IssueDate,
+                    recipientNameOverride: selection.RecipientName,
+                    consumptionAddressOverride: selection.ConsumptionAddress,
+                    representativeNameOverride: selection.RepresentativeName,
+                    householdPhoneOverride: selection.HouseholdPhone,
+                    representativePhoneOverride: selection.RepresentativePhone);
 
                 _ui.ShowMessage(
                     "In hóa đơn nhóm",
@@ -351,7 +358,9 @@ namespace ElectricCalculation.ViewModels
                             groupName,
                             customers,
                             _periodLabel,
-                            _issuerName);
+                            _issuerName,
+                            "Hà Nội",
+                            DateTime.Today);
 
                         successCount++;
                     }

@@ -82,6 +82,7 @@ namespace ElectricCalculation.ViewModels
         private bool isFastEntryMode = true;
 
         private const string AllGroupsOption = "(Tất cả)";
+        private const string NoGroupOption = "(Không có nhóm)";
 
         public ObservableCollection<string> GroupOptions { get; } = new();
 
@@ -1197,6 +1198,74 @@ namespace ElectricCalculation.ViewModels
             }
 
             ExecuteUndoable(new CompositeUndoableAction($"Đặt cột: {columnTitle}", actions));
+        }
+
+        [RelayCommand]
+        private void AssignGroupToSelectedRows(IList? selectedItems)
+        {
+            var targets = selectedItems?.OfType<Customer>()
+                .Distinct()
+                .ToList();
+
+            if (targets == null || targets.Count == 0)
+            {
+                return;
+            }
+
+            var existing = targets
+                .Select(c => (c.GroupName ?? string.Empty).Trim())
+                .Distinct(StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            var initialValue = existing.Count == 1 ? existing[0] : null;
+            var text = _ui.ShowSetColumnValueDialog("Nhóm / Đơn vị", initialValue);
+            if (text == null)
+            {
+                return;
+            }
+
+            var newValue = text.Trim();
+
+            var changes = targets
+                .Select(customer => (Customer: customer, Before: customer.GroupName ?? string.Empty, After: newValue))
+                .Where(change => !string.Equals(change.Before, change.After, StringComparison.CurrentCulture))
+                .ToList();
+
+            if (changes.Count == 0)
+            {
+                return;
+            }
+
+            var actionName = string.IsNullOrWhiteSpace(newValue) ? "Bỏ nhóm" : $"Gán nhóm: {newValue}";
+            var action = new DelegateUndoableAction(
+                name: actionName,
+                undo: () => ApplyGroupNameChanges(changes, useAfter: false),
+                redo: () => ApplyGroupNameChanges(changes, useAfter: true));
+
+            ExecuteUndoable(action);
+        }
+
+        private void ApplyGroupNameChanges(IReadOnlyList<(Customer Customer, string Before, string After)> changes, bool useAfter)
+        {
+            var wasSuppressDirty = _suppressDirty;
+            _suppressDirty = true;
+
+            try
+            {
+                foreach (var change in changes)
+                {
+                    change.Customer.GroupName = useAfter ? change.After : change.Before;
+                }
+            }
+            finally
+            {
+                _suppressDirty = wasSuppressDirty;
+            }
+
+            IsDirty = true;
+            UpdateGroupOptions();
+            CustomersView.Refresh();
+            NotifySummaryChanged();
         }
 
         [RelayCommand]
@@ -2442,11 +2511,22 @@ namespace ElectricCalculation.ViewModels
             if (!string.IsNullOrWhiteSpace(SelectedGroup) &&
                 !string.Equals(SelectedGroup.Trim(), AllGroupsOption, StringComparison.CurrentCultureIgnoreCase))
             {
-                var selectedKey = NormalizeGroupKey(SelectedGroup);
-                var groupKey = NormalizeGroupKey(customer.GroupName);
-                if (!string.Equals(groupKey, selectedKey, StringComparison.CurrentCultureIgnoreCase))
+                var selectedTrimmed = SelectedGroup.Trim();
+                if (string.Equals(selectedTrimmed, NoGroupOption, StringComparison.CurrentCultureIgnoreCase))
                 {
-                    return false;
+                    if (!string.IsNullOrWhiteSpace(NormalizeGroupKey(customer.GroupName)))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    var selectedKey = NormalizeGroupKey(selectedTrimmed);
+                    var groupKey = NormalizeGroupKey(customer.GroupName);
+                    if (!string.Equals(groupKey, selectedKey, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        return false;
+                    }
                 }
             }
 
@@ -2529,10 +2609,13 @@ namespace ElectricCalculation.ViewModels
                 .OrderBy(g => g, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
-            var selectedKey = NormalizeGroupKey(SelectedGroup);
+            var selectedTrimmed = (SelectedGroup ?? string.Empty).Trim();
+            var selectedKey = NormalizeGroupKey(selectedTrimmed);
 
             GroupOptions.Clear();
             GroupOptions.Add(AllGroupsOption);
+            GroupOptions.Add(NoGroupOption);
+
             foreach (var group in groups)
             {
                 GroupOptions.Add(group);
@@ -2545,8 +2628,14 @@ namespace ElectricCalculation.ViewModels
                 return;
             }
 
+            if (string.Equals(selectedTrimmed, NoGroupOption, StringComparison.CurrentCultureIgnoreCase))
+            {
+                SelectedGroup = NoGroupOption;
+                return;
+            }
+
             var match = GroupOptions
-                .Skip(1)
+                .Skip(2)
                 .FirstOrDefault(g => string.Equals(NormalizeGroupKey(g), selectedKey, StringComparison.CurrentCultureIgnoreCase));
 
             SelectedGroup = match ?? AllGroupsOption;

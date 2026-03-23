@@ -254,8 +254,8 @@
                           Command="{Binding PrintInvoicesByRangeWithDialogCommand}" />
             </MenuItem>
 
-            <MenuItem Header="_Báo cáo">
-                <MenuItem Header="Thống kê theo nhóm..."
+            <MenuItem x:Name="ReportMenuItem" Header="_Báo cáo">
+                <MenuItem x:Name="ReportGroupMenuItem" Header="Thống kê theo nhóm..."
                           Command="{Binding ShowReportCommand}" />
             </MenuItem>
 
@@ -409,6 +409,7 @@
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                   ScrollViewer.IsDeferredScrollingEnabled="False"
                   SelectionMode="Extended"
+                  behaviors:DataGridRightClickSelectBehavior.IsEnabled="True"
                   behaviors:DataGridEditHistoryBehavior.TrackCellEditCommand="{Binding TrackCellEditCommand}"
                   behaviors:DataGridEditHistoryBehavior.PasteFromClipboardCommand="{Binding PasteFromClipboardCommand}"
                   behaviors:DataGridEditHistoryBehavior.FillDownCommand="{Binding FillDownCommand}"
@@ -483,6 +484,9 @@
                     <MenuItem Header="Đặt toàn bộ cột hiện tại..."
                               Command="{Binding SetColumnValueCommand}"
                               CommandParameter="{Binding PlacementTarget.CurrentColumn, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="Gán vào nhóm..."
+                              Command="{Binding AssignGroupToSelectedRowsCommand}"
+                              CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                     <Separator />
                     <MenuItem Header="Nhân đôi dòng (Ctrl+Shift+D)"
                               Command="{Binding DuplicateRowCommand}"

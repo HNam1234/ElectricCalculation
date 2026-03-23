@@ -28,7 +28,14 @@ namespace ElectricCalculation.Services
             string groupName,
             IReadOnlyList<Customer> customers,
             string periodLabel,
-            string issuerName)
+            string issuerName,
+            string? issuePlace = null,
+            DateTime? issueDate = null,
+            string? recipientNameOverride = null,
+            string? consumptionAddressOverride = null,
+            string? representativeNameOverride = null,
+            string? householdPhoneOverride = null,
+            string? representativePhoneOverride = null)
         {
             if (string.IsNullOrWhiteSpace(templatePath))
             {
@@ -164,7 +171,14 @@ namespace ElectricCalculation.Services
                 group,
                 list,
                 periodLabel,
-                issuerName);
+                issuerName,
+                issuePlace,
+                issueDate,
+                recipientNameOverride,
+                consumptionAddressOverride,
+                representativeNameOverride,
+                householdPhoneOverride,
+                representativePhoneOverride);
 
             using (var sheetWriteStream = templateSheetEntry.Open())
             {
@@ -223,7 +237,14 @@ namespace ElectricCalculation.Services
             string groupName,
             IReadOnlyList<Customer> customers,
             string periodLabel,
-            string issuerName)
+            string issuerName,
+            string? issuePlace,
+            DateTime? issueDate,
+            string? recipientNameOverride,
+            string? consumptionAddressOverride,
+            string? representativeNameOverride,
+            string? householdPhoneOverride,
+            string? representativePhoneOverride)
         {
             var worksheetRoot = sheetDoc.Root
                 ?? throw new InvalidOperationException("Legacy template worksheet is empty.");
@@ -285,12 +306,57 @@ namespace ElectricCalculation.Services
 
             var representativeDisplay = !string.IsNullOrWhiteSpace(sharedRepresentative) ? sharedRepresentative : groupName;
 
-            UpdateTextCell(sheetDataElement, mainNs, "A5", $"Kính gửi: {groupName}");
+            var recipientDisplay = groupName;
+            if (!string.IsNullOrWhiteSpace(recipientNameOverride))
+            {
+                recipientDisplay = recipientNameOverride.Trim();
+            }
+
+            var addressDisplay = sharedAddress;
+            if (!string.IsNullOrWhiteSpace(consumptionAddressOverride))
+            {
+                addressDisplay = consumptionAddressOverride.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(representativeNameOverride))
+            {
+                representativeDisplay = representativeNameOverride.Trim();
+            }
+
+            var householdPhoneDisplay = sharedHouseholdPhone;
+            if (!string.IsNullOrWhiteSpace(householdPhoneOverride))
+            {
+                householdPhoneDisplay = householdPhoneOverride.Trim();
+            }
+
+            var representativePhoneDisplay = sharedRepresentativePhone;
+            if (!string.IsNullOrWhiteSpace(representativePhoneOverride))
+            {
+                representativePhoneDisplay = representativePhoneOverride.Trim();
+            }
+
+            normalizedHouseholdPhone = NormalizePhoneForComparison(householdPhoneDisplay);
+            normalizedRepresentativePhone = NormalizePhoneForComparison(representativePhoneDisplay);
+
+            if (!string.IsNullOrWhiteSpace(normalizedHouseholdPhone) &&
+                !string.IsNullOrWhiteSpace(normalizedRepresentativePhone) &&
+                string.Equals(normalizedHouseholdPhone, normalizedRepresentativePhone, StringComparison.OrdinalIgnoreCase))
+            {
+                representativePhoneDisplay = string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(householdPhoneDisplay) && !string.IsNullOrWhiteSpace(representativePhoneDisplay))
+            {
+                householdPhoneDisplay = representativePhoneDisplay;
+                representativePhoneDisplay = string.Empty;
+            }
+
+            UpdateTextCell(sheetDataElement, mainNs, "A5", $"Kính gửi: {recipientDisplay}");
             UpdateTextCell(
                 sheetDataElement,
                 mainNs,
                 "A7",
-                string.IsNullOrWhiteSpace(sharedAddress) ? string.Empty : EnsureTrailingPeriod($"Địa chỉ hộ tiêu thụ: {sharedAddress}"));
+                string.IsNullOrWhiteSpace(addressDisplay) ? string.Empty : EnsureTrailingPeriod($"Địa chỉ hộ tiêu thụ: {addressDisplay}"));
             UpdateTextCell(
                 sheetDataElement,
                 mainNs,
@@ -300,12 +366,12 @@ namespace ElectricCalculation.Services
                 sheetDataElement,
                 mainNs,
                 "J7",
-                string.IsNullOrWhiteSpace(sharedHouseholdPhone) ? string.Empty : $"Điện thoại: {sharedHouseholdPhone}");
+                string.IsNullOrWhiteSpace(householdPhoneDisplay) ? string.Empty : $"Điện thoại: {householdPhoneDisplay}");
             UpdateTextCell(
                 sheetDataElement,
                 mainNs,
                 "J8",
-                string.IsNullOrWhiteSpace(sharedRepresentativePhone) ? string.Empty : $"Điện thoại: {sharedRepresentativePhone}");
+                string.IsNullOrWhiteSpace(representativePhoneDisplay) ? string.Empty : $"Điện thoại: {representativePhoneDisplay}");
 
             var displayNames = BuildMultiHouseholdDisplayNames(customers);
 
@@ -352,11 +418,18 @@ namespace ElectricCalculation.Services
                 $"A{amountTextRowIndex}",
                 string.IsNullOrWhiteSpace(amountText) ? string.Empty : $"Bằng chữ: {amountText}./.");
 
+            var resolvedPlace = issuePlace == null ? "Hà Nội" : issuePlace;
+            resolvedPlace = (resolvedPlace ?? string.Empty).Trim();
+            var resolvedDate = issueDate ?? DateTime.Now;
+            var dateText = string.IsNullOrWhiteSpace(resolvedPlace)
+                ? $"Ngày {resolvedDate.Day} tháng {resolvedDate.Month} năm {resolvedDate.Year}"
+                : $"{resolvedPlace}, ngày {resolvedDate.Day} tháng {resolvedDate.Month} năm {resolvedDate.Year}";
+
             UpdateTextCell(
                 sheetDataElement,
                 mainNs,
                 $"H{dateRowIndex}",
-                $"Hà Nội, ngày {DateTime.Now.Day} tháng {DateTime.Now.Month} năm {DateTime.Now.Year}");
+                dateText);
 
             var issuer = issuerName?.Trim() ?? string.Empty;
             UpdateTextCell(sheetDataElement, mainNs, $"H{issuerRowIndex}", issuer);
