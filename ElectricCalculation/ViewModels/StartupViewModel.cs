@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -29,8 +30,15 @@ namespace ElectricCalculation.ViewModels
     public partial class StartupViewModel : ObservableObject
     {
         private readonly UiService _ui;
+        private bool _hasDoneInitialRefresh;
 
         public ObservableCollection<SnapshotItem> RecentSnapshots { get; } = new();
+
+        [ObservableProperty]
+        private bool isLoadingResources;
+
+        [ObservableProperty]
+        private string loadingResourcesText = "Đang tải tài nguyên…";
 
         [ObservableProperty]
         private SnapshotItem? selectedSnapshot;
@@ -39,29 +47,21 @@ namespace ElectricCalculation.ViewModels
         {
             _ui = new UiService();
 
-            try
-            {
-                SaveGameService.SyncFromSharedStoreIfEnabled();
-            }
-            catch (Exception ex)
-            {
-                HandleRequestError(ex);
-            }
-
-            if (!SaveGameService.IsSharedSyncEnabled())
+            if (!SaveGameService.IsSharedSyncEnabled() && !SaveGameService.IsSharedSavesFolderEnabled())
             {
                 _ = SampleDataService.TrySeedJune2025SampleSnapshotOnce();
             }
 
-            RefreshSnapshots();
+            _ = RefreshSnapshotsAsync();
         }
 
         [RelayCommand]
-        private void RefreshSnapshots()
+        private async Task RefreshSnapshotsAsync()
         {
             try
             {
                 var keepSelectedPath = SelectedSnapshot?.Path;
+                var isInitialRefresh = !_hasDoneInitialRefresh;
 
                 var snapshots = SaveGameService.ListSnapshots(maxCount: 50);
 
@@ -106,10 +106,12 @@ namespace ElectricCalculation.ViewModels
                         string.Equals(i.Path, keepSelectedPath, StringComparison.OrdinalIgnoreCase));
                 }
 
+                _hasDoneInitialRefresh = true;
                 CreateNewPeriodFromDatasetCommand.NotifyCanExecuteChanged();
             }
             catch (Exception ex)
             {
+                IsLoadingResources = false;
                 HandleRequestError(ex);
             }
         }
@@ -150,7 +152,7 @@ namespace ElectricCalculation.ViewModels
         {
             try
             {
-                RefreshSnapshots();
+                _ = RefreshSnapshotsAsync();
 
                 var snapshots = SaveGameService.ListSnapshots(maxCount: 200);
                 if (snapshots.Count == 0)
@@ -391,7 +393,7 @@ namespace ElectricCalculation.ViewModels
                 }
 
                 PinnedDatasetService.SavePins(pins);
-                RefreshSnapshots();
+                _ = RefreshSnapshotsAsync();
             }
             catch (Exception ex)
             {
@@ -430,7 +432,7 @@ namespace ElectricCalculation.ViewModels
                     throw new WarningException(error ?? "Failed to delete dataset.");
                 }
 
-                RefreshSnapshots();
+                _ = RefreshSnapshotsAsync();
             }
             catch (Exception ex)
             {

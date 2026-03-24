@@ -2,7 +2,8 @@ namespace ElectricCalculation.Models
 {
     public sealed class AppSettings
     {
-        public string SharedSyncDatabasePath { get; set; } = string.Empty;
+        // Optional: if set, snapshots will be saved/listed from this folder (can be a UNC/network share).
+        public string SharedSavesDirectory { get; set; } = string.Empty;
 
         public decimal DefaultUnitPrice { get; set; }
 

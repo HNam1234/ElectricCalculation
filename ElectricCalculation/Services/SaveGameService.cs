@@ -14,32 +14,42 @@ namespace ElectricCalculation.Services
 
         public sealed record SnapshotInfo(string Path, string PeriodLabel, string? SnapshotName, DateTime SavedAt);
 
+        public static bool IsSharedSavesFolderEnabled()
+        {
+            try
+            {
+                var settings = AppSettingsService.Load();
+                return !string.IsNullOrWhiteSpace(settings.SharedSavesDirectory);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static bool IsSharedSyncEnabled()
         {
-            return SharedSnapshotDatabaseService.IsEnabled();
+            // SQL shared-sync has been reverted/disabled.
+            return false;
         }
 
         public static string GetSaveRootDirectory()
         {
+            try
+            {
+                var settings = AppSettingsService.Load();
+                if (!string.IsNullOrWhiteSpace(settings.SharedSavesDirectory))
+                {
+                    return settings.SharedSavesDirectory.Trim();
+                }
+            }
+            catch
+            {
+                // Ignore settings read failures.
+            }
+
             var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             return Path.Combine(documents, "ElectricCalculation", "Saves");
-        }
-
-        public static void SyncFromSharedStoreIfEnabled()
-        {
-            var root = GetSaveRootDirectory();
-            Directory.CreateDirectory(root);
-
-            if (!IsSharedSyncEnabled())
-            {
-                return;
-            }
-
-            var records = SharedSnapshotDatabaseService.ListSnapshots(maxCount: 5000);
-            foreach (var record in records)
-            {
-                SharedSnapshotDatabaseService.MaterializeToLocal(root, record);
-            }
         }
 
         public static string SaveSnapshot(string periodLabel, IEnumerable<Customer> customers, string? snapshotName = null)
@@ -50,10 +60,14 @@ namespace ElectricCalculation.Services
                 safePeriod = "UnknownPeriod";
             }
 
-            var folder = Path.Combine(GetSaveRootDirectory(), safePeriod);
+            var root = GetSaveRootDirectory();
+            var folder = IsSharedSavesFolderEnabled()
+                ? Path.Combine(root, safePeriod, MakeSafeFileName(GetClientId()))
+                : Path.Combine(root, safePeriod);
             Directory.CreateDirectory(folder);
 
-            var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+            stamp = $"{stamp}_{Random.Shared.Next(1000, 10000)}";
             var safeSnapshotName = MakeSafeFileName(snapshotName ?? string.Empty);
             var fileName = string.IsNullOrWhiteSpace(safeSnapshotName)
                 ? $"{stamp} - {safePeriod}.json"
@@ -61,18 +75,9 @@ namespace ElectricCalculation.Services
             var path = Path.Combine(folder, fileName);
 
             ProjectFileService.Save(path, periodLabel ?? string.Empty, customers);
-            TrimOldSnapshots(folder);
 
-            if (IsSharedSyncEnabled())
-            {
-                var savedAtUtc = File.GetLastWriteTimeUtc(path);
-                SharedSnapshotDatabaseService.UpsertSnapshot(
-                    saveRootDirectory: GetSaveRootDirectory(),
-                    snapshotPath: path,
-                    periodLabel: periodLabel ?? string.Empty,
-                    snapshotName: snapshotName,
-                    savedAtUtc: savedAtUtc);
-            }
+            // In shared-folder mode, snapshots are per-client subfolder, so trimming stays safe.
+            TrimOldSnapshots(folder);
 
             return path;
         }
@@ -86,24 +91,6 @@ namespace ElectricCalculation.Services
 
             var root = GetSaveRootDirectory();
             Directory.CreateDirectory(root);
-
-            if (IsSharedSyncEnabled())
-            {
-                var records = SharedSnapshotDatabaseService.ListSnapshots(maxCount);
-                var synced = new List<SnapshotInfo>(records.Count);
-
-                foreach (var record in records)
-                {
-                    var localPath = SharedSnapshotDatabaseService.MaterializeToLocal(root, record);
-                    synced.Add(new SnapshotInfo(
-                        localPath,
-                        record.PeriodLabel,
-                        record.SnapshotName,
-                        record.SavedAtUtc.ToLocalTime()));
-                }
-
-                return synced;
-            }
 
             if (!Directory.Exists(root))
             {
@@ -130,23 +117,7 @@ namespace ElectricCalculation.Services
 
         public static void SyncSnapshotFileToSharedStore(string snapshotPath, string periodLabel)
         {
-            if (!IsSharedSyncEnabled() || string.IsNullOrWhiteSpace(snapshotPath))
-            {
-                return;
-            }
-
-            if (!File.Exists(snapshotPath))
-            {
-                throw new WarningException("Khong tim thay file snapshot de dong bo.");
-            }
-
-            var snapshotName = TryReadSnapshotNameFromFileName(Path.GetFileName(snapshotPath));
-            SharedSnapshotDatabaseService.UpsertSnapshot(
-                saveRootDirectory: GetSaveRootDirectory(),
-                snapshotPath: snapshotPath,
-                periodLabel: periodLabel ?? string.Empty,
-                snapshotName: snapshotName,
-                savedAtUtc: File.GetLastWriteTimeUtc(snapshotPath));
+            // SQL shared-sync has been reverted/disabled.
         }
 
         public static bool TryDeleteSnapshot(string snapshotPath, out string? error)
@@ -179,19 +150,9 @@ namespace ElectricCalculation.Services
                     return false;
                 }
 
-                if (IsSharedSyncEnabled())
-                {
-                    SharedSnapshotDatabaseService.DeleteSnapshot(GetSaveRootDirectory(), fullPath);
-                }
-
                 if (File.Exists(fullPath))
                 {
                     File.Delete(fullPath);
-                    return true;
-                }
-
-                if (IsSharedSyncEnabled())
-                {
                     return true;
                 }
 
@@ -223,6 +184,20 @@ namespace ElectricCalculation.Services
             catch
             {
                 // Best-effort cleanup; snapshot save should still succeed.
+            }
+        }
+
+        private static string GetClientId()
+        {
+            try
+            {
+                var machine = Environment.MachineName?.Trim() ?? "UnknownMachine";
+                var user = Environment.UserName?.Trim() ?? "UnknownUser";
+                return $"{machine}_{user}";
+            }
+            catch
+            {
+                return "UnknownClient";
             }
         }
 

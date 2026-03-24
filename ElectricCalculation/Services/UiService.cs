@@ -336,7 +336,7 @@ namespace ElectricCalculation.Services
 
         public AppSettings? ShowSettingsDialog(AppSettings settings)
         {
-            var vm = new SettingsViewModel(settings ?? new AppSettings());
+            var vm = new SettingsViewModel(this, settings ?? new AppSettings());
             var dialog = new SettingsWindow
             {
                 Owner = GetOwner(),

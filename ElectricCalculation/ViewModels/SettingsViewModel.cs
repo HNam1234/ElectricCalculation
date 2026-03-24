@@ -1,14 +1,16 @@
 using System;
 using System.Globalization;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ElectricCalculation.Models;
+using ElectricCalculation.Services;
 
 namespace ElectricCalculation.ViewModels
 {
     public partial class SettingsViewModel : ObservableObject
     {
-        private readonly string _sharedSyncDatabasePath;
+        private readonly UiService _ui;
 
         [ObservableProperty]
         private bool? dialogResult;
@@ -26,6 +28,9 @@ namespace ElectricCalculation.ViewModels
         private string defaultPerformedBy = string.Empty;
 
         [ObservableProperty]
+        private string sharedSavesDirectory = string.Empty;
+
+        [ObservableProperty]
         private bool applyDefaultsOnNewRow = true;
 
         [ObservableProperty]
@@ -37,10 +42,12 @@ namespace ElectricCalculation.ViewModels
         [ObservableProperty]
         private string errorMessage = string.Empty;
 
-        public SettingsViewModel(AppSettings settings)
+        public SettingsViewModel(UiService ui, AppSettings settings)
         {
+            _ui = ui ?? new UiService();
             var s = settings ?? new AppSettings();
-            _sharedSyncDatabasePath = s.SharedSyncDatabasePath ?? string.Empty;
+            SharedSavesDirectory = s.SharedSavesDirectory ?? string.Empty;
+
             DefaultUnitPrice = s.DefaultUnitPrice.ToString("0.##", CultureInfo.CurrentCulture);
             DefaultMultiplier = s.DefaultMultiplier.ToString("0.##", CultureInfo.CurrentCulture);
             DefaultSubsidizedKwh = s.DefaultSubsidizedKwh.ToString("0.##", CultureInfo.CurrentCulture);
@@ -68,7 +75,8 @@ namespace ElectricCalculation.ViewModels
 
             return new AppSettings
             {
-                SharedSyncDatabasePath = _sharedSyncDatabasePath,
+                SharedSavesDirectory = SharedSavesDirectory ?? string.Empty,
+
                 DefaultUnitPrice = unitPrice,
                 DefaultMultiplier = multiplier,
                 DefaultSubsidizedKwh = subsidizedKwh,
@@ -77,6 +85,29 @@ namespace ElectricCalculation.ViewModels
                 ApplyDefaultsOnImport = ApplyDefaultsOnImport,
                 OverrideExistingValues = OverrideExistingValues
             };
+        }
+
+        [RelayCommand]
+        private void BrowseSharedSavesDirectory()
+        {
+            try
+            {
+                var folder = _ui.ShowFolderPickerDialog("Chon thu muc du lieu dung chung");
+                if (!string.IsNullOrWhiteSpace(folder))
+                {
+                    SharedSavesDirectory = folder.Trim();
+                }
+            }
+            catch
+            {
+                // Ignore browse errors.
+            }
+        }
+
+        [RelayCommand]
+        private void ClearSharedSavesDirectory()
+        {
+            SharedSavesDirectory = string.Empty;
         }
 
         [RelayCommand]

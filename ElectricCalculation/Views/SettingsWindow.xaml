@@ -18,6 +18,8 @@
              <RowDefinition Height="Auto" />
              <RowDefinition Height="Auto" />
              <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
          </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -47,20 +49,46 @@
          <TextBox Grid.Row="4" Grid.Column="1" Width="360" Margin="0,0,0,12"
                   Text="{Binding DefaultPerformedBy, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-         <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,0,0,10">
+        <TextBlock Grid.Row="5" Grid.Column="0"
+                   Text="Thu muc du lieu dung chung:"
+                   VerticalAlignment="Top"
+                   Margin="0,2,10,10" />
+        <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,0,0,10">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right"
+                        Width="80"
+                        Margin="8,0,0,0"
+                        Content="Chon..."
+                        Command="{Binding BrowseSharedSavesDirectoryCommand}" />
+                <TextBox MinWidth="360"
+                         Text="{Binding SharedSavesDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </DockPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                <Button Width="80"
+                        Content="Xoa"
+                        Command="{Binding ClearSharedSavesDirectoryCommand}" />
+                <TextBlock Text="Neu de trong: luu local (Documents). Neu co: nhieu may co the dung chung (UNC/share)."
+                           Margin="10,4,0,0"
+                           Opacity="0.7"
+                           TextWrapping="Wrap"
+                           MaxWidth="420" />
+            </StackPanel>
+        </StackPanel>
+
+         <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Margin="0,0,0,10">
              <CheckBox Content="Ap dung khi them dong moi" IsChecked="{Binding ApplyDefaultsOnNewRow, Mode=TwoWay}" />
              <CheckBox Content="Ap dung sau khi import Excel" Margin="0,6,0,0" IsChecked="{Binding ApplyDefaultsOnImport, Mode=TwoWay}" />
              <CheckBox Content="Ghi de gia tri da co" Margin="0,6,0,0" IsChecked="{Binding OverrideExistingValues, Mode=TwoWay}" />
          </StackPanel>
 
-         <TextBlock Grid.Row="6" Grid.ColumnSpan="2"
+         <TextBlock Grid.Row="8" Grid.ColumnSpan="2"
                     Foreground="#C00000"
                     Text="{Binding ErrorMessage}"
                     Margin="0,0,0,10"
                     TextWrapping="Wrap"
                     MaxWidth="520" />
 
-         <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+         <StackPanel Grid.Row="9" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
              <Button Width="90" Margin="0,0,8,0" Content="Luu" IsDefault="True" Command="{Binding OkCommand}" />
              <Button Width="90" Content="Huy" IsCancel="True" Command="{Binding CancelCommand}" />
          </StackPanel>
