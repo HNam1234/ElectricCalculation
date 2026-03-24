@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ElectricCalculation.Services;
@@ -468,14 +469,30 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
-        private void ShowUserGuide()
+        private async Task ShowUserGuide()
         {
             try
             {
+                if (!_ui.HasCachedUserGuide())
+                {
+                    LoadingResourcesText = "Loading resources…";
+                    IsLoadingResources = true;
+
+                    var dispatcher = Application.Current?.Dispatcher;
+                    if (dispatcher != null)
+                    {
+                        await dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+                    }
+
+                    _ui.EnsureUserGuideLoaded();
+                    IsLoadingResources = false;
+                }
+
                 _ui.ShowUserGuideDialog();
             }
             catch (Exception ex)
             {
+                IsLoadingResources = false;
                 HandleRequestError(ex);
             }
         }

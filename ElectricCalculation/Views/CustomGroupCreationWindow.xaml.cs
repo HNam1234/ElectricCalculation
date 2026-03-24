@@ -2,11 +2,12 @@ using System.Windows;
 
 namespace ElectricCalculation.Views
 {
-    public partial class StartupWindow : Window
+    public partial class CustomGroupCreationWindow : Window
     {
-        public StartupWindow()
+        public CustomGroupCreationWindow()
         {
             InitializeComponent();
         }
     }
 }
+

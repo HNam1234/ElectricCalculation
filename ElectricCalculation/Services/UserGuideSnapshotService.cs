@@ -903,14 +903,29 @@ namespace ElectricCalculation.Services
                 return false;
             }
 
+            var overlayElement = startupWindow.FindName("LoadingOverlay") as UIElement;
+            var overlayOpacity = overlayElement?.Opacity;
+
             try
             {
+                if (overlayElement != null && overlayOpacity is > 0)
+                {
+                    overlayElement.Opacity = 0;
+                }
+
                 screenshot = CaptureWindowVisual(startupWindow, fallbackWidth: 1100, fallbackHeight: 720);
                 return true;
             }
             catch
             {
                 return false;
+            }
+            finally
+            {
+                if (overlayElement != null && overlayOpacity.HasValue)
+                {
+                    overlayElement.Opacity = overlayOpacity.Value;
+                }
             }
         }
 

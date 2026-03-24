@@ -1,0 +1,105 @@
+<Window x:Class="ElectricCalculation.Views.CustomGroupCreationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:ElectricCalculation.Behaviors"
+        Title="Tạo nhóm custom"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="ToolWindow"
+        behaviors:DialogCloser.DialogResult="{Binding DialogResult}">
+    <Grid Margin="16" MinWidth="480">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Margin="0,0,0,12" Opacity="0.9" TextWrapping="Wrap" MaxWidth="520">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ShowSelectionSummary}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+            <Run Text="Đã chọn " />
+            <Run Text="{Binding SelectedCustomerCount, Mode=OneWay}" FontWeight="SemiBold" />
+            <Run Text=" hộ (" />
+            <Run Text="{Binding SourceGroupCount, Mode=OneWay}" FontWeight="SemiBold" />
+            <Run Text=" nhóm). Nhập tên nhóm custom để in hóa đơn gộp:" />
+        </TextBlock>
+
+        <TextBlock Grid.Row="0" Margin="0,0,0,12" Opacity="0.9" TextWrapping="Wrap" MaxWidth="520">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ShowSelectionSummary}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+            <Run Text="Nhập tên nhóm custom để in hóa đơn gộp:" />
+        </TextBlock>
+
+        <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Tên nhóm custom:" Margin="0,0,0,6" />
+            <TextBox Grid.Row="1"
+                     Width="420"
+                     MinHeight="26"
+                     VerticalContentAlignment="Center"
+                     Text="{Binding GroupName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <TextBlock Grid.Row="2" Text="Nhóm đã chọn:" Margin="0,12,0,6">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowGroupList}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <Border Grid.Row="3" BorderBrush="#FFE5E7EB" BorderThickness="1" CornerRadius="4">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowGroupList}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <ScrollViewer Height="140" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding SourceGroups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Margin="10,4" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button MinWidth="90" Margin="0,0,8,0" Content="OK" IsDefault="True" Command="{Binding OkCommand}" />
+            <Button MinWidth="80" Content="Hủy" IsCancel="True" Command="{Binding CancelCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>

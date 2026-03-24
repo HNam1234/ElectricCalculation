@@ -276,15 +276,13 @@ namespace ElectricCalculation.Services
             UpdateNumberCell(sheetDataElement, mainNs, "J6", null);
 
             var periodText = FormatPeriodLabel(periodLabel);
-            if (!string.IsNullOrWhiteSpace(periodText))
-            {
-                UpdateTextCell(sheetDataElement, mainNs, "F2", periodText);
-            }
+            UpdateTextCell(sheetDataElement, mainNs, "F2", periodText);
 
             var sharedAddress = ResolveGroupHeaderAddress(groupName, customers);
             var sharedRepresentative = GetSharedNonEmptyValue(customers, c => c.RepresentativeName) ?? string.Empty;
             var sharedHouseholdPhone = ResolveBestPhone(customers, c => c.HouseholdPhone);
             var sharedRepresentativePhone = ResolveBestPhone(customers, c => c.Phone);
+            var hasExplicitPhoneOverride = householdPhoneOverride != null || representativePhoneOverride != null;
 
             var normalizedHouseholdPhone = NormalizePhoneForComparison(sharedHouseholdPhone);
             var normalizedRepresentativePhone = NormalizePhoneForComparison(sharedRepresentativePhone);
@@ -296,7 +294,9 @@ namespace ElectricCalculation.Services
                 sharedRepresentativePhone = string.Empty;
             }
 
-            if (string.IsNullOrWhiteSpace(sharedHouseholdPhone) && !string.IsNullOrWhiteSpace(sharedRepresentativePhone))
+            if (!hasExplicitPhoneOverride &&
+                string.IsNullOrWhiteSpace(sharedHouseholdPhone) &&
+                !string.IsNullOrWhiteSpace(sharedRepresentativePhone))
             {
                 sharedHouseholdPhone = sharedRepresentativePhone;
                 sharedRepresentativePhone = string.Empty;
@@ -307,30 +307,30 @@ namespace ElectricCalculation.Services
             var representativeDisplay = !string.IsNullOrWhiteSpace(sharedRepresentative) ? sharedRepresentative : groupName;
 
             var recipientDisplay = groupName;
-            if (!string.IsNullOrWhiteSpace(recipientNameOverride))
+            if (recipientNameOverride != null)
             {
                 recipientDisplay = recipientNameOverride.Trim();
             }
 
             var addressDisplay = sharedAddress;
-            if (!string.IsNullOrWhiteSpace(consumptionAddressOverride))
+            if (consumptionAddressOverride != null)
             {
                 addressDisplay = consumptionAddressOverride.Trim();
             }
 
-            if (!string.IsNullOrWhiteSpace(representativeNameOverride))
+            if (representativeNameOverride != null)
             {
                 representativeDisplay = representativeNameOverride.Trim();
             }
 
             var householdPhoneDisplay = sharedHouseholdPhone;
-            if (!string.IsNullOrWhiteSpace(householdPhoneOverride))
+            if (householdPhoneOverride != null)
             {
                 householdPhoneDisplay = householdPhoneOverride.Trim();
             }
 
             var representativePhoneDisplay = sharedRepresentativePhone;
-            if (!string.IsNullOrWhiteSpace(representativePhoneOverride))
+            if (representativePhoneOverride != null)
             {
                 representativePhoneDisplay = representativePhoneOverride.Trim();
             }
@@ -345,13 +345,19 @@ namespace ElectricCalculation.Services
                 representativePhoneDisplay = string.Empty;
             }
 
-            if (string.IsNullOrWhiteSpace(householdPhoneDisplay) && !string.IsNullOrWhiteSpace(representativePhoneDisplay))
+            if (!hasExplicitPhoneOverride &&
+                string.IsNullOrWhiteSpace(householdPhoneDisplay) &&
+                !string.IsNullOrWhiteSpace(representativePhoneDisplay))
             {
                 householdPhoneDisplay = representativePhoneDisplay;
                 representativePhoneDisplay = string.Empty;
             }
 
-            UpdateTextCell(sheetDataElement, mainNs, "A5", $"Kính gửi: {recipientDisplay}");
+            UpdateTextCell(
+                sheetDataElement,
+                mainNs,
+                "A5",
+                string.IsNullOrWhiteSpace(recipientDisplay) ? string.Empty : $"Kính gửi: {recipientDisplay}");
             UpdateTextCell(
                 sheetDataElement,
                 mainNs,

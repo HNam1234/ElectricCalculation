@@ -252,6 +252,10 @@
                           Command="{Binding PrintAllInvoicesWithDialogCommand}" />
                 <MenuItem Header="Xuất hóa đơn theo số..."
                           Command="{Binding PrintInvoicesByRangeWithDialogCommand}" />
+                <Separator />
+                <MenuItem Header="In hóa đơn nhóm (custom)..."
+                          Command="{Binding PrintCustomGroupInvoiceWithDialogCommand}"
+                          CommandParameter="{Binding SelectedItems, ElementName=CustomerGrid}" />
             </MenuItem>
 
             <MenuItem x:Name="ReportMenuItem" Header="_Báo cáo">
@@ -404,10 +408,12 @@
                   EnableColumnVirtualization="True"
                   VirtualizingPanel.IsVirtualizing="True"
                   VirtualizingPanel.VirtualizationMode="Recycling"
+                  VirtualizingPanel.CacheLength="2"
+                  VirtualizingPanel.CacheLengthUnit="Item"
                   ScrollViewer.CanContentScroll="True"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                  ScrollViewer.IsDeferredScrollingEnabled="False"
+                  ScrollViewer.IsDeferredScrollingEnabled="True"
                   SelectionMode="Extended"
                   behaviors:DataGridRightClickSelectBehavior.IsEnabled="True"
                   behaviors:DataGridEditHistoryBehavior.TrackCellEditCommand="{Binding TrackCellEditCommand}"
@@ -487,6 +493,9 @@
                     <MenuItem Header="Gán vào nhóm..."
                               Command="{Binding AssignGroupToSelectedRowsCommand}"
                               CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="In hóa đơn nhóm (custom)..."
+                              Command="{Binding PrintCustomGroupInvoiceWithDialogCommand}"
+                              CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                     <Separator />
                     <MenuItem Header="Nhân đôi dòng (Ctrl+Shift+D)"
                               Command="{Binding DuplicateRowCommand}"
@@ -561,7 +570,7 @@
                                     IsReadOnly="True"
                                     Width="100" />
                 <DataGridTextColumn Header="Chỉ số mới"
-                                    Binding="{Binding CurrentIndex, UpdateSourceTrigger=PropertyChanged}"
+                                    Binding="{Binding CurrentIndex, UpdateSourceTrigger=LostFocus}"
                                     Width="100">
                      <DataGridTextColumn.CellStyle>
                          <Style TargetType="{x:Type DataGridCell}">

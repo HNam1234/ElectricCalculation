@@ -56,6 +56,12 @@
                       CanUserAddRows="False"
                       CanUserDeleteRows="False"
                       IsReadOnly="False"
+                      EnableRowVirtualization="True"
+                      EnableColumnVirtualization="True"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      VirtualizingPanel.CacheLength="2"
+                      VirtualizingPanel.CacheLengthUnit="Item"
                       SelectionUnit="FullRow"
                       SelectionMode="Extended"
                       behaviors:DataGridRightClickSelectBehavior.IsEnabled="True"
@@ -63,6 +69,9 @@
                       behaviors:DataGridSelectRowOnClickBehavior.IsEnabled="True"
                       HeadersVisibility="Column"
                       GridLinesVisibility="All"
+                      ScrollViewer.CanContentScroll="True"
+                      ScrollViewer.IsDeferredScrollingEnabled="True"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                       ScrollViewer.HorizontalScrollBarVisibility="Auto">
                 <DataGrid.ContextMenu>
                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">

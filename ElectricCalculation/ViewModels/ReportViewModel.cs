@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ElectricCalculation.Helpers;
@@ -402,6 +403,98 @@ namespace ElectricCalculation.ViewModels
             catch (Exception ex)
             {
                 _ui.ShowMessage("Lỗi in hóa đơn theo nhóm", ex.Message);
+            }
+        }
+
+        [RelayCommand]
+        private async Task PrintCustomGroup()
+        {
+            try
+            {
+                if (_sourceCustomers.Count == 0)
+                {
+                    _ui.ShowMessage("In hóa đơn nhóm (custom)", "Không có dữ liệu khách hàng để chọn.");
+                    return;
+                }
+
+                var customGroupName = _ui.ShowCustomGroupCreationDialog(
+                    sourceGroups: Array.Empty<string>(),
+                    selectedCustomerCount: 0,
+                    defaultGroupName: "Nhóm custom");
+
+                if (string.IsNullOrWhiteSpace(customGroupName))
+                {
+                    return;
+                }
+
+                customGroupName = customGroupName.Trim();
+
+                var selection = _ui.ShowGroupInvoiceSelectionDialog(customGroupName, _sourceCustomers, _periodLabel, _issuerName);
+                if (selection == null)
+                {
+                    return;
+                }
+
+                var customers = selection.SelectedCustomers
+                    .Where(c => c != null)
+                    .OrderBy(c => c.SequenceNumber > 0 ? c.SequenceNumber : int.MaxValue)
+                    .ThenBy(c => c.Name)
+                    .ToList();
+
+                if (customers.Count == 0)
+                {
+                    _ui.ShowMessage("In hóa đơn nhóm (custom)", "Bạn chưa chọn hộ nào để in.");
+                    return;
+                }
+
+                var confirm = _ui.Confirm(
+                    "In hóa đơn nhóm (custom)",
+                    $"Nhóm: {customGroupName}\nSố khách đã chọn: {customers.Count}\n\nXuất 1 hóa đơn gộp cho nhóm này?");
+
+                if (!confirm)
+                {
+                    return;
+                }
+
+                var safeGroupName = MakeSafeFileName(customGroupName);
+                var outputPath = _ui.ShowSaveExcelFileDialog(
+                    $"Hoa don - {safeGroupName}.xlsx",
+                    title: "In hóa đơn nhóm (custom)");
+
+                if (string.IsNullOrWhiteSpace(outputPath))
+                {
+                    return;
+                }
+
+                var templatePath = _ui.GetLegacySummaryTemplatePath();
+                using var busy = _ui.ShowBusyScope("In hóa đơn nhóm (custom)", "Đang tạo hóa đơn, vui lòng chờ...");
+
+                var sheetCount = await Task.Run(() => LegacyGroupInvoiceExportService.ExportGroupInvoice(
+                    templatePath,
+                    outputPath,
+                    customGroupName,
+                    customers,
+                    selection.PeriodLabel,
+                    selection.IssuerName,
+                    issuePlace: selection.IssuePlace,
+                    issueDate: selection.IssueDate,
+                    recipientNameOverride: selection.RecipientName,
+                    consumptionAddressOverride: selection.ConsumptionAddress,
+                    representativeNameOverride: selection.RepresentativeName,
+                    householdPhoneOverride: selection.HouseholdPhone,
+                    representativePhoneOverride: selection.RepresentativePhone));
+
+                _ui.ShowMessage(
+                    "In hóa đơn nhóm (custom)",
+                    $"Đã tạo {sheetCount} sheet hóa đơn nhóm ({customers.Count} hộ) cho '{customGroupName}' tại:\n{outputPath}");
+            }
+            catch (WarningException warning)
+            {
+                _ui.ShowMessage("In hóa đơn nhóm (custom)", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                _ui.ShowMessage("Lỗi in hóa đơn nhóm (custom)", ex.Message);
             }
         }
 

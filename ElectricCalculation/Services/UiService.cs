@@ -23,12 +23,20 @@ namespace ElectricCalculation.Services
         private static IReadOnlyList<UserGuideSectionItem>? CachedUserGuideSections;
         private static DateTime CachedUserGuideGeneratedAt;
 
-        public void PreloadUserGuide(Window? owner = null)
+        public bool HasCachedUserGuide()
+        {
+            lock (UserGuideLock)
+            {
+                return CachedUserGuideSections != null && CachedUserGuideSections.Count > 0;
+            }
+        }
+
+        public void EnsureUserGuideLoaded(Window? owner = null)
         {
             owner ??= GetOwner();
             if (owner == null)
             {
-                return;
+                throw new WarningException("Không thể tạo hướng dẫn khi không có cửa sổ đang hoạt động.");
             }
 
             lock (UserGuideLock)
@@ -39,22 +47,27 @@ namespace ElectricCalculation.Services
                 }
             }
 
+            var sections = UserGuideSnapshotService.BuildGuideSections(owner);
+            if (sections.Count == 0)
+            {
+                throw new WarningException("Không thể tạo ảnh hướng dẫn. Hãy thử mở lại hướng dẫn sau.");
+            }
+
+            lock (UserGuideLock)
+            {
+                if (CachedUserGuideSections == null || CachedUserGuideSections.Count == 0)
+                {
+                    CachedUserGuideSections = sections;
+                    CachedUserGuideGeneratedAt = DateTime.Now;
+                }
+            }
+        }
+
+        public void PreloadUserGuide(Window? owner = null)
+        {
             try
             {
-                var sections = UserGuideSnapshotService.BuildGuideSections(owner);
-                if (sections.Count == 0)
-                {
-                    return;
-                }
-
-                lock (UserGuideLock)
-                {
-                    if (CachedUserGuideSections == null || CachedUserGuideSections.Count == 0)
-                    {
-                        CachedUserGuideSections = sections;
-                        CachedUserGuideGeneratedAt = DateTime.Now;
-                    }
-                }
+                EnsureUserGuideLoaded(owner);
             }
             catch
             {
@@ -371,6 +384,29 @@ namespace ElectricCalculation.Services
             };
 
             return dialog.ShowDialog() == true ? vm.ValueText : null;
+        }
+
+        public string? ShowCustomGroupCreationDialog(IReadOnlyList<string> sourceGroups, string? defaultGroupName = null)
+        {
+            return ShowCustomGroupCreationDialog(sourceGroups, selectedCustomerCount: 0, defaultGroupName);
+        }
+
+        public string? ShowCustomGroupCreationDialog(IReadOnlyList<string> sourceGroups, int selectedCustomerCount, string? defaultGroupName = null)
+        {
+            var vm = new CustomGroupCreationViewModel(sourceGroups ?? Array.Empty<string>(), selectedCustomerCount, defaultGroupName);
+            var dialog = new CustomGroupCreationWindow
+            {
+                Owner = GetOwner(),
+                DataContext = vm
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return null;
+            }
+
+            var groupName = (vm.GroupName ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(groupName) ? null : groupName;
         }
 
         public NewDatasetCreationOption? ShowNewDatasetOptionsDialog()

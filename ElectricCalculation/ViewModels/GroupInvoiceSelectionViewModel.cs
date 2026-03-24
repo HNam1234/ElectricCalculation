@@ -157,12 +157,10 @@ namespace ElectricCalculation.ViewModels
                 }
 
                 var effectiveRecipient = UseAutoHeaderFields ? GroupName : (RecipientName ?? string.Empty).Trim();
-                if (string.IsNullOrWhiteSpace(effectiveRecipient))
+                if (!string.IsNullOrWhiteSpace(effectiveRecipient))
                 {
-                    effectiveRecipient = GroupName;
+                    lines.Add($"Kính gửi: {effectiveRecipient}");
                 }
-
-                lines.Add($"Kính gửi: {effectiveRecipient}");
 
                 var effectiveAddress = UseAutoHeaderFields ? resolvedAddress : (ConsumptionAddress ?? string.Empty).Trim();
                 var effectiveRepresentative = UseAutoHeaderFields ? resolvedRepresentativeDisplay : (RepresentativeName ?? string.Empty).Trim();
@@ -288,10 +286,6 @@ namespace ElectricCalculation.ViewModels
                 .ToList();
 
             var effectiveRecipient = UseAutoHeaderFields ? GroupName : (RecipientName ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(effectiveRecipient))
-            {
-                effectiveRecipient = GroupName;
-            }
 
             var effectiveAddress = UseAutoHeaderFields ? resolvedAddress : (ConsumptionAddress ?? string.Empty).Trim();
             var effectiveRepresentative = UseAutoHeaderFields ? resolvedRepresentativeDisplay : (RepresentativeName ?? string.Empty).Trim();

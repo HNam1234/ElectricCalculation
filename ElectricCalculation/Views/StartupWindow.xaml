@@ -489,7 +489,8 @@
         </Border>
 
         <!-- Loading overlay -->
-        <Grid Grid.RowSpan="2"
+        <Grid x:Name="LoadingOverlay"
+              Grid.RowSpan="2"
               Grid.ColumnSpan="2"
               Panel.ZIndex="999"
               Background="#80000000"

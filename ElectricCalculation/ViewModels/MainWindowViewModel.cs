@@ -2045,6 +2045,114 @@ namespace ElectricCalculation.ViewModels
         }
 
         [RelayCommand]
+        private async Task PrintCustomGroupInvoiceWithDialog(IList? selectedItems)
+        {
+            try
+            {
+                var customers = selectedItems?
+                    .OfType<Customer>()
+                    .Distinct()
+                    .ToList()
+                    ?? new List<Customer>();
+
+                if (customers.Count == 0)
+                {
+                    _ui.ShowMessage("In hóa đơn nhóm (custom)", "Hãy chọn ít nhất 1 hộ trên datagrid trước.");
+                    return;
+                }
+
+                var sourceGroups = customers
+                    .Select(c =>
+                    {
+                        var groupName = (c.GroupName ?? string.Empty).Trim();
+                        return string.IsNullOrWhiteSpace(groupName) ? "(Không có nhóm)" : groupName;
+                    })
+                    .Distinct(StringComparer.CurrentCultureIgnoreCase)
+                    .OrderBy(g => g, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+
+                var defaultGroupName = sourceGroups.Count == 1
+                    ? sourceGroups[0]
+                    : $"Nhóm custom ({customers.Count} hộ)";
+
+                var customGroupName = _ui.ShowCustomGroupCreationDialog(sourceGroups, customers.Count, defaultGroupName);
+                if (string.IsNullOrWhiteSpace(customGroupName))
+                {
+                    return;
+                }
+
+                customGroupName = customGroupName.Trim();
+
+                var selection = _ui.ShowGroupInvoiceSelectionDialog(customGroupName, customers, PeriodLabel, InvoiceIssuer);
+                if (selection == null)
+                {
+                    return;
+                }
+
+                customers = selection.SelectedCustomers
+                    .OrderBy(c => c.SequenceNumber)
+                    .ToList();
+
+                if (customers.Count == 0)
+                {
+                    _ui.ShowMessage("In hóa đơn nhóm (custom)", "Bạn chưa chọn hộ nào để in.");
+                    return;
+                }
+
+                var confirm = _ui.Confirm(
+                    "In hóa đơn nhóm (custom)",
+                    $"Nhóm: {customGroupName}\nSố khách đã chọn: {customers.Count}\n\nXuất 1 hóa đơn gộp cho nhóm này?");
+
+                if (!confirm)
+                {
+                    return;
+                }
+
+                var safeGroupName = MakeSafeFileName(customGroupName);
+                var outputPath = _ui.ShowSaveExcelFileDialog(
+                    $"Hoa don - {safeGroupName}.xlsx",
+                    title: "In hóa đơn nhóm (custom)");
+
+                if (string.IsNullOrWhiteSpace(outputPath))
+                {
+                    return;
+                }
+
+                var templatePath = _ui.GetLegacySummaryTemplatePath();
+                using var busy = _ui.ShowBusyScope("In hóa đơn nhóm (custom)", "Đang tạo hóa đơn, vui lòng chờ...");
+
+                var sheetCount = await Task.Run(() => LegacyGroupInvoiceExportService.ExportGroupInvoice(
+                    templatePath,
+                    outputPath,
+                    customGroupName,
+                    customers,
+                    selection.PeriodLabel,
+                    selection.IssuerName,
+                    issuePlace: selection.IssuePlace,
+                    issueDate: selection.IssueDate,
+                    recipientNameOverride: selection.RecipientName,
+                    consumptionAddressOverride: selection.ConsumptionAddress,
+                    representativeNameOverride: selection.RepresentativeName,
+                    householdPhoneOverride: selection.HouseholdPhone,
+                    representativePhoneOverride: selection.RepresentativePhone));
+
+                _ui.ShowMessage(
+                    "In hóa đơn nhóm (custom)",
+                    $"Đã tạo {sheetCount} sheet hóa đơn nhóm ({customers.Count} hộ) cho '{customGroupName}' tại:\n{outputPath}");
+            }
+            catch (WarningException warning)
+            {
+                Debug.WriteLine(warning);
+                _ui.ShowMessage("In hóa đơn nhóm (custom)", warning.Message);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                _ui.ShowMessage("Lỗi in hóa đơn nhóm (custom)", ex.Message);
+            }
+        }
+
+        [RelayCommand]
         private void ExportSelectionToExcel(string outputPath)
         {
             if (string.IsNullOrWhiteSpace(outputPath))
