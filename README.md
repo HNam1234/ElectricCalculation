@@ -1,3 +1,5 @@
+Quick Demo: https://www.youtube.com/watch?v=8aEa1spbI5A&t=121s
+
 # ElectricCalculation – Hướng dẫn sử dụng
 
 ## Mục tiêu
